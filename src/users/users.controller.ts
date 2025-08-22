@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { FilterDto, IResponse } from './dto/filter.dto';
+import { AuthGuard } from 'src/guards/authgaurd';
 
 @Controller('users')
 export class UsersController {
@@ -16,6 +17,7 @@ export class UsersController {
         return this.usersService.findAllUsersList(pageNumber, pageSize, filters);
     }
 
+    @UseGuards(AuthGuard)
     @Get('/:id')
     async fetchSingleUserDetails(
         @Param('id') id: string

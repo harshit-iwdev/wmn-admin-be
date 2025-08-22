@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { User } from '../models';
 import { QueryTypes } from 'sequelize';
-import { FilterDto } from './dto/filter.dto';
+import { FilterDto, IResponse } from './dto/filter.dto';
 
 
 @Injectable()
@@ -15,16 +15,17 @@ export class UsersService {
         return this.userModel.findAll();
     }
 
-    async findAllUsers(pageNumber: number, pageSize: number, filters: FilterDto): Promise<any> {
+    async findAllUsersList(pageNumber: number, pageSize: number, filters: FilterDto): Promise<IResponse> {
         try {
             const { search, sort_by, order_by, userType } = filters;
 
-            let executeDataQuery = `SELECT U.*, M.* FROM auth.users as U 
+            let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as userMetadata FROM auth.users as U 
                 join public.metadata as M on U.id = M.user_id
-                where U.last_seen is not null and M.user_type = 'user'`;
+                where U.last_seen IS NOT NULL`;
+
             let executeCountQuery = `SELECT COUNT(*) as count FROM auth.users as U
-                join public.metadata as M on U.id = M.user_id
-                where U.last_seen is not null and M.user_type = 'user'`;
+                JOIN public.metadata AS M on U.id = M.user_id
+                WHERE U.last_seen IS NOT NULL`;
             if (search) {
                 executeDataQuery += ` AND (U.email ILIKE '%${search}%' OR U.display_name ILIKE '%${search}%' OR M.first_name ILIKE '%${search}%' OR M.last_name ILIKE '%${search}%')`;
                 executeCountQuery += ` AND (U.email ILIKE '%${search}%' OR U.display_name ILIKE '%${search}%' OR M.first_name ILIKE '%${search}%' OR M.last_name ILIKE '%${search}%')`;
@@ -69,11 +70,35 @@ export class UsersService {
 
             return {
                 success: true, data: {
-                    users: users as User[],
-                    totalCount: totalCount[0]?.count || 0,
+                    rows: users,
+                    count: totalCount[0]?.count || 0,
                 },
                 message: 'Users fetched successfully',
             };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
+    async fetchUserDetailsById(id: string): Promise<any> {
+        try {
+
+            let executeDataQuery = `SELECT to_jsonb(U) AS user, to_jsonb(M) AS metadata
+                FROM auth.users AS U
+                JOIN public.metadata AS M ON U.id = M.user_id
+                WHERE U.id = :id`;
+
+            const user: any = await this.userModel?.sequelize?.query(
+                executeDataQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id },
+                }
+            );
+
+            return { success: true, data: user[0], message: 'User details fetched successfully' };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);

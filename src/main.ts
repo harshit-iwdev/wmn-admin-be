@@ -4,6 +4,15 @@ import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
 import { json } from 'express';
+import { randomUUID } from 'crypto';
+
+// Polyfill for crypto.randomUUID if not available
+if (!global.crypto) {
+  global.crypto = {
+    randomUUID: () => randomUUID(),
+  } as any;
+}
+
 dotenv.config();
 
 async function bootstrap() {

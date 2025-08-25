@@ -5,8 +5,8 @@ export interface IResponse {
 }
 
 export class FilterDto {
-    search: string;
-    sort_by: string;
-    order_by: string;
-    userType: string;
+    searchTerm: string;
+    sortBy: string;
+    sortOrder: string;
+    selectedRole: string;
 }

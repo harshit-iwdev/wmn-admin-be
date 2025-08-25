@@ -25,4 +25,50 @@ export class UsersController {
         return this.usersService.fetchUserDetailsById(id);
     }
 
+    @UseGuards(AuthGuard)
+    @Get('/followers/:id')
+    async fetchUserFollowers(
+        @Param('id') id: string
+    ) {
+        return this.usersService.fetchUserFollowers(id);
+    }
+
+    @UseGuards(AuthGuard)
+    @Get('/following/:id')
+    async fetchUserFollowing(
+        @Param('id') id: string
+    ) {
+        return this.usersService.fetchUserFollowing(id);
+    }
+
+    @UseGuards(AuthGuard)
+    @Get('/food-logs/:id/:pageNumber/:pageSize')
+    async fetchUserFoodLogs(
+        @Param('id') id: string,
+        @Param('pageNumber') pageNumber: number,
+        @Param('pageSize') pageSize: number
+    ) {
+        return this.usersService.fetchUserFoodLogs(id, pageNumber, pageSize);
+    }
+
+    @UseGuards(AuthGuard)
+    @Get('/reviews/:id/:pageNumber/:pageSize')
+    async fetchUserReviews(
+        @Param('id') id: string,
+        @Param('pageNumber') pageNumber: number,
+        @Param('pageSize') pageSize: number
+    ) {
+        return this.usersService.fetchUserReviews(id, pageNumber, pageSize);
+    }
+
+    @UseGuards(AuthGuard)
+    @Get('/intentions/:id/:pageNumber/:pageSize')
+    async fetchUserIntentions(
+        @Param('id') id: string,
+        @Param('pageNumber') pageNumber: number,
+        @Param('pageSize') pageSize: number
+    ) {
+        return this.usersService.fetchUserIntentions(id, pageNumber, pageSize);
+    }
+
 }

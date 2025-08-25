@@ -17,8 +17,7 @@ export class UsersService {
 
     async findAllUsersList(pageNumber: number, pageSize: number, filters: FilterDto): Promise<IResponse> {
         try {
-            const { search, sort_by, order_by, userType } = filters;
-
+            const { searchTerm, sortBy, sortOrder, selectedRole } = filters;
             let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as userMetadata FROM auth.users as U 
                 join public.metadata as M on U.id = M.user_id
                 where U.last_seen IS NOT NULL`;
@@ -26,21 +25,21 @@ export class UsersService {
             let executeCountQuery = `SELECT COUNT(*) as count FROM auth.users as U
                 JOIN public.metadata AS M on U.id = M.user_id
                 WHERE U.last_seen IS NOT NULL`;
-            if (search) {
-                executeDataQuery += ` AND (U.email ILIKE '%${search}%' OR U.display_name ILIKE '%${search}%' OR M.first_name ILIKE '%${search}%' OR M.last_name ILIKE '%${search}%')`;
-                executeCountQuery += ` AND (U.email ILIKE '%${search}%' OR U.display_name ILIKE '%${search}%' OR M.first_name ILIKE '%${search}%' OR M.last_name ILIKE '%${search}%')`;
+            if (searchTerm) {
+                executeDataQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%')`;
+                executeCountQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%')`;
             }
 
-            if (userType) {
-                executeDataQuery += ` AND M.user_type = '${userType}'`;
-                executeCountQuery += ` AND M.user_type = '${userType}'`;
+            if (selectedRole === 'practitioner') {
+                executeDataQuery += ` AND M.user_type = 'practitioner'`;
+                executeCountQuery += ` AND M.user_type = 'practitioner'`;
             }
 
-            if (sort_by && order_by) {
-                if (sort_by === 'last_seen' || sort_by === 'email') {
-                    executeDataQuery += ` ORDER BY U.${sort_by} ${order_by}`;
-                } else if (sort_by === 'first_name' || sort_by === 'last_name' || sort_by === 'username' || sort_by === 'cycle' || sort_by === 'proDay' || sort_by === 'plan' || sort_by === 'renewal_number') {
-                    executeDataQuery += ` ORDER BY M.${sort_by} ${order_by}`;
+            if (sortBy && sortOrder) {
+                if (sortBy === 'last_seen' || sortBy === 'email') {
+                    executeDataQuery += ` ORDER BY U.${sortBy} ${sortOrder}`;
+                } else if (sortBy === 'first_name' || sortBy === 'last_name' || sortBy === 'username' || sortBy === 'cycle' || sortBy === 'pro_day' || sortBy === 'plan' || sortBy === 'renewalNumber') {
+                    executeDataQuery += ` ORDER BY M.${sortBy} ${sortOrder}`;
                 }
             } else {
                 executeDataQuery += ` ORDER BY U.last_seen DESC`;
@@ -83,10 +82,10 @@ export class UsersService {
 
     async fetchUserDetailsById(id: string): Promise<any> {
         try {
-
-            let executeDataQuery = `SELECT to_jsonb(U) AS user, to_jsonb(M) AS metadata
+            let executeDataQuery = `SELECT to_jsonb(U) AS user, to_jsonb(M) AS metadata, to_jsonb(S) as settings
                 FROM auth.users AS U
                 JOIN public.metadata AS M ON U.id = M.user_id
+                LEFT JOIN public.settings AS S ON M.user_id = S."user_id"
                 WHERE U.id = :id`;
 
             const user: any = await this.userModel?.sequelize?.query(
@@ -98,7 +97,203 @@ export class UsersService {
                 }
             );
 
-            return { success: true, data: user[0], message: 'User details fetched successfully' };
+            const userData = user[0];
+
+            let executeFollowerQuery = `SELECT COUNT("follow_user_id") AS "followingCount"
+                FROM public.user_follows WHERE "user_id" = :id`;
+
+            const follower: any = await this.userModel?.sequelize?.query(
+                executeFollowerQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id },
+                }
+            );
+
+            let executeFollowingQuery = `SELECT COUNT("user_id") AS "followerCount"
+                FROM public.user_follows WHERE "follow_user_id" = :id`;
+
+            const following: any = await this.userModel?.sequelize?.query(
+                executeFollowingQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id },
+                }
+            );
+
+            userData.followerCount = follower[0]?.followingCount || 0;
+            userData.followingCount = following[0]?.followerCount || 0;
+
+            let executeActivityDataQuery = `SELECT COUNT(FL.id) as "foodLogs", COUNT(I.id) as "intentions", COUNT(P.id) as "pins"
+                FROM public.food_logs AS FL
+                LEFT JOIN public.intentions AS I ON FL."userId" = I."user_id"
+                LEFT JOIN public.pins AS P ON FL."userId" = P."user_id"
+                WHERE FL."userId" = :id`;
+
+            const activityData: any = await this.userModel?.sequelize?.query(
+                executeActivityDataQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id },
+                }
+            );
+
+            userData.activityData = activityData[0] || { foodLogs: 0, intentions: 0, pins: 0 };
+            return { success: true, data: userData, message: 'User details fetched successfully' };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
+    async fetchUserFollowers(id: string): Promise<any> {
+        try {
+            let executeFollowersQuery = `SELECT U.id, U.email, U.display_name, U.last_seen, U.avatar_url,
+                M.first_name, M.last_name, M.user_type, M.username
+                FROM auth.users AS U
+                JOIN public.user_follows AS UF ON U.id = UF."user_id"
+                JOIN public.metadata AS M ON UF."user_id" = M."user_id"
+                WHERE UF."follow_user_id" = :id`;
+
+            const followers: any = await this.userModel?.sequelize?.query(
+                executeFollowersQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id },
+                }
+            );
+
+            return { success: true, data: followers, message: 'User followers fetched successfully' };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
+    async fetchUserFollowing(id: string): Promise<any> {
+        try {
+            let executeFollowingQuery = `SELECT U.id, U.email, U.display_name, U.last_seen, U.avatar_url,
+                M.first_name, M.last_name, M.user_type, M.username
+                FROM auth.users AS U
+                JOIN public.user_follows AS UF ON U.id = UF."follow_user_id"
+                JOIN public.metadata AS M ON UF."follow_user_id" = M."user_id"
+                WHERE UF."user_id" = :id`;
+
+            const following: any = await this.userModel?.sequelize?.query(
+                executeFollowingQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id },
+                }
+            );
+
+            return { success: true, data: following, message: 'User following fetched successfully' };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
+    async fetchUserFoodLogs(id: string, pageNumber: number, pageSize: number): Promise<any> {
+        try {
+            const offset = (pageNumber - 1) * pageSize;
+            let executeFoodLogsQuery = `SELECT to_jsonb(FL) as "foodLogs", to_jsonb(AIFR) as "aiFoodRecognition"
+                FROM public.food_logs AS FL
+                LEFT JOIN public.ai_food_recognition AS AIFR ON FL."ai_food_data_id" = AIFR.id
+                WHERE FL."userId" = :id
+                ORDER BY FL."created_at" DESC
+                LIMIT :pageSize OFFSET :offset`;
+
+            const foodLogs: any = await this.userModel?.sequelize?.query(
+                executeFoodLogsQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id, pageSize: pageSize, offset: offset },
+                }
+            );
+
+            let executeFoodLogsCountQuery = `SELECT COUNT(FL.id) as "count" FROM public.food_logs AS FL
+                WHERE FL."userId" = :id`;
+
+            const foodLogsCount: any = await this.userModel?.sequelize?.query(
+                executeFoodLogsCountQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id },
+                }
+            );
+
+            return { success: true, data: { rows: foodLogs, count: foodLogsCount[0]?.count || 0 }, message: 'User food logs fetched successfully' };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
+    async fetchUserReviews(id: string, pageNumber: number, pageSize: number): Promise<any> {
+        try {
+            const offset = (pageNumber - 1) * pageSize;
+            let executeReviewsQuery = `SELECT * FROM public.reviews WHERE "user_id" = :id
+                ORDER BY "created_at" DESC LIMIT :pageSize OFFSET :offset`;
+
+            const reviews: any = await this.userModel?.sequelize?.query(
+                executeReviewsQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id, pageSize: pageSize, offset: offset },
+                }
+            );
+
+            let executeReviewsCountQuery = `SELECT COUNT(id) as "count" FROM public.reviews WHERE "user_id" = :id`;
+
+            const reviewsCount: any = await this.userModel?.sequelize?.query(
+                executeReviewsCountQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id },
+                }
+            );
+            return { success: true, data: { rows: reviews, count: reviewsCount[0]?.count || 0 }, message: 'User reviews fetched successfully' };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
+    async fetchUserIntentions(id: string, pageNumber: number, pageSize: number): Promise<any> {
+        try {
+            const offset = (pageNumber - 1) * pageSize;
+            let executeIntentionsQuery = `SELECT * FROM public.intentions WHERE "user_id" = :id LIMIT :pageSize OFFSET :offset`;
+
+            const intentions: any = await this.userModel?.sequelize?.query(
+                executeIntentionsQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id, pageSize: pageSize, offset: offset },
+                }
+            );
+
+            let executeIntentionsCountQuery = `SELECT COUNT(id) as "count" FROM public.intentions WHERE "user_id" = :id`;
+
+            const intentionsCount: any = await this.userModel?.sequelize?.query(
+                executeIntentionsCountQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id },
+                }
+            );
+            return { success: true, data: { rows: intentions, count: intentionsCount[0]?.count || 0 }, message: 'User intentions fetched successfully' };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);

@@ -21,8 +21,19 @@ export class UsersService {
     async findAllUsersList(pageNumber: number, pageSize: number, filters: FilterDto): Promise<IResponse> {
         try {
             const { searchTerm, sortBy, sortOrder, selectedRole } = filters;
-            let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as userMetadata FROM auth.users as U 
+            // let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as userMetadata FROM auth.users as U 
+            //     join public.metadata as M on U.id = M.user_id
+            //     where U.last_seen IS NOT NULL`;
+
+            let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as userMetadata,
+                COALESCE(followers.follower_count, 0) AS "followerCount",
+                COALESCE(following.following_count, 0) AS "followingCount"
+                FROM auth.users as U 
                 join public.metadata as M on U.id = M.user_id
+                LEFT JOIN (SELECT "follow_user_id" AS id, COUNT(*) AS follower_count
+                FROM public.user_follows GROUP BY "follow_user_id") AS followers ON followers.id = U.id
+                LEFT JOIN (SELECT "user_id" AS id, COUNT(*) AS following_count
+                FROM public.user_follows GROUP BY "user_id") AS following ON following.id = U.id
                 where U.last_seen IS NOT NULL`;
 
             let executeCountQuery = `SELECT COUNT(*) as count FROM auth.users as U
@@ -62,8 +73,98 @@ export class UsersService {
                 }
             );
 
-            const totalCount: any = await this.userModel?.sequelize?.query(
-                executeCountQuery,
+            // if (users) {
+            //     for (let i = 0; i < users.length; i++) {
+            //         const element: any = users[i];
+
+            //         let executeFollowerQuery = `SELECT COUNT("follow_user_id") AS "followingCount"
+            //     FROM public.user_follows WHERE "user_id" = :id`;
+
+            //         const follower: any = await this.userModel?.sequelize?.query(
+            //             executeFollowerQuery,
+            //             {
+            //                 type: QueryTypes.SELECT,
+            //                 raw: true,
+            //                 replacements: { id: element.user.id },
+            //             }
+            //         );
+
+            //         let executeFollowingQuery = `SELECT COUNT("user_id") AS "followerCount"
+            //     FROM public.user_follows WHERE "follow_user_id" = :id`;
+
+            //         const following: any = await this.userModel?.sequelize?.query(
+            //             executeFollowingQuery,
+            //             {
+            //                 type: QueryTypes.SELECT,
+            //                 raw: true,
+            //                 replacements: { id: element.user.id },
+            //             }
+            //         );
+
+            //         element.followerCount = follower[0]?.followingCount || 0;
+            //         element.followingCount = following[0]?.followerCount || 0;
+            //     }
+            // }
+
+
+
+            
+
+            // let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as userMetadata,
+            //     COALESCE(followers.follower_count, 0) AS "followerCount",
+            //     COALESCE(following.following_count, 0) AS "followingCount",
+            //     FROM auth.users AS U JOIN public.metadata AS M ON U.id = M.user_id
+            //     LEFT JOIN (SELECT "follow_user_id" AS id, COUNT(*) AS follower_count
+            //       FROM public.user_follows GROUP BY "follow_user_id"
+            //     ) AS followers ON followers.id = U.id
+            //     LEFT JOIN (SELECT "user_id" AS id, COUNT(*) AS following_count
+            //       FROM public.user_follows GROUP BY "user_id"
+            //     ) AS following ON following.id = U.id
+            //     WHERE U.last_seen IS NOT NULL`;
+
+            // let executeCountQuery = `SELECT COUNT(*) as count FROM auth.users AS U
+            //     JOIN public.metadata AS M ON U.id = M.user_id WHERE U.last_seen IS NOT NULL`;
+
+            // // add dynamic filters
+            // if (searchTerm) {
+            //     const searchFilter = ` AND (U.email ILIKE :search OR U.display_name ILIKE :search OR 
+            //         M.first_name ILIKE :search OR M.last_name ILIKE :search OR 
+            //         M.username ILIKE :search)`;
+            //     executeDataQuery += searchFilter;
+            //     executeCountQuery += searchFilter;
+            // }
+
+            // if (selectedRole === 'practitioner') {
+            //     executeDataQuery += ` AND M.user_type = 'practitioner'`;
+            //     executeCountQuery += ` AND M.user_type = 'practitioner'`;
+            // }
+
+            // if (sortBy && sortOrder) {
+            //     if (sortBy === 'last_seen' || sortBy === 'email') {
+            //         executeDataQuery += ` ORDER BY U.${sortBy} ${sortOrder}`;
+            //     } else {
+            //         executeDataQuery += ` ORDER BY M."${sortBy}" ${sortOrder}`;
+            //     }
+            // } else {
+            //     executeDataQuery += ` ORDER BY U.last_seen DESC`;
+            // }
+
+            // executeDataQuery += ` LIMIT :pageSize OFFSET :offset`;
+
+            // const users = await this.userModel?.sequelize?.query(executeDataQuery,
+            //     {
+            //         type: QueryTypes.SELECT,
+            //         raw: true,
+            //         replacements: {
+            //             search: searchTerm,
+            //             selectedRole: selectedRole,
+            //             pageSize: pageSize,
+            //             offset: (pageNumber - 1) * pageSize,
+            //         },
+            //     }
+            // );
+
+            const totalCount: any = await this.userModel?.sequelize?.query(executeCountQuery,
                 {
                     type: QueryTypes.SELECT,
                     raw: true,

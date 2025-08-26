@@ -26,8 +26,8 @@ export class UsersService {
                 JOIN public.metadata AS M on U.id = M.user_id
                 WHERE U.last_seen IS NOT NULL`;
             if (searchTerm) {
-                executeDataQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%')`;
-                executeCountQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%')`;
+                executeDataQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
+                executeCountQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
             }
 
             if (selectedRole === 'practitioner') {
@@ -39,7 +39,7 @@ export class UsersService {
                 if (sortBy === 'last_seen' || sortBy === 'email') {
                     executeDataQuery += ` ORDER BY U.${sortBy} ${sortOrder}`;
                 } else if (sortBy === 'first_name' || sortBy === 'last_name' || sortBy === 'username' || sortBy === 'cycle' || sortBy === 'pro_day' || sortBy === 'plan' || sortBy === 'renewalNumber') {
-                    executeDataQuery += ` ORDER BY M.${sortBy} ${sortOrder}`;
+                    executeDataQuery += ` ORDER BY M."${sortBy}" ${sortOrder}`;
                 }
             } else {
                 executeDataQuery += ` ORDER BY U.last_seen DESC`;
@@ -294,6 +294,31 @@ export class UsersService {
                 }
             );
             return { success: true, data: { rows: intentions, count: intentionsCount[0]?.count || 0 }, message: 'User intentions fetched successfully' };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
+    async getProUserCount(): Promise<any> {
+        try {
+            const proUserCount: any = await this.userModel?.sequelize?.query(
+                `SELECT COUNT(DISTINCT(M.user_id)) as "proUserCount" FROM public.metadata AS M
+                WHERE M."user_type" != 'practitioner' AND M."plan" NOT IN ('free', 'trial', 'dev')`);
+
+            const activeUserCount: any = await this.userModel?.sequelize?.query(
+                `SELECT COUNT(DISTINCT(U.id)) as "activeUserCount" FROM auth.users AS U
+                WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '7 day'`);
+
+            const onboardedUserCount: any = await this.userModel?.sequelize?.query(
+                `SELECT COUNT(DISTINCT(M.user_id)) as "onboardedUserCount" FROM public.metadata AS M
+                WHERE M."onboarded" = true`);
+
+            return { success: true, data: {
+                proUserCount: proUserCount[0][0]?.proUserCount || 0,
+                activeUserCount: activeUserCount[0][0]?.activeUserCount || 0,
+                onboardedUserCount: onboardedUserCount[0][0]?.onboardedUserCount || 0
+            }, message: 'Pro user count fetched successfully' };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);

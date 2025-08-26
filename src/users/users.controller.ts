@@ -18,6 +18,12 @@ export class UsersController {
     }
 
     @UseGuards(AuthGuard)
+    @Get('/pro-user-count')
+    async getProUserCount() {
+        return this.usersService.getProUserCount();
+    }
+    
+    @UseGuards(AuthGuard)
     @Get('/:id')
     async fetchSingleUserDetails(
         @Param('id') id: string

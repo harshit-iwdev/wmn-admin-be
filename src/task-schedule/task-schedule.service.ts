@@ -23,61 +23,61 @@ export class TaskScheduleService {
                     'Content-Type': 'application/json',
                 },
             });
-            console.log(ingestData.data.people.length, "---ingestData---25");
+            console.log(ingestData.data.people.length, "---ingestData---26");
 
-            for (let i = 0; i < ingestData.data.people.length; i++) {
+            for (let i = 340; i < ingestData.data.people.length; i++) {
                 const element = ingestData.data.people[i];
 
-                if (i > 0) {
-                    break;
-                }
-
-                let executeDataQuery = `SELECT to_jsonb(U) AS user, to_jsonb(M) AS metadata
+                console.log(i, "---i---31");
+                if (element.userId !== 'daw81' || element.userId !== 'jmp123') {
+                    let executeDataQuery = `SELECT to_jsonb(U) AS user, to_jsonb(M) AS metadata
                     FROM auth.users AS U
                     JOIN public.metadata AS M ON U.id = M.user_id
                     WHERE U.id = :id`;
 
-                const user: any = await this.userModel?.sequelize?.query(executeDataQuery,
-                    {
-                        type: QueryTypes.SELECT,
-                        raw: true,
-                        replacements: { id: element.userId },
+                    const user: any = await this.userModel?.sequelize?.query(executeDataQuery,
+                        {
+                            type: QueryTypes.SELECT,
+                            raw: true,
+                            replacements: { id: element.userId },
+                        }
+                    );
+                    console.log(user, "---user---45");
+                    
+                    if (user.length > 0) {
+                        const repObj = {
+                            revCatTrial: element.REVCATTRIALNOTRIAL ? element.REVCATTRIALNOTRIAL : null,
+                            renewalNumber: element.renewal_number ? element.renewal_number : null,
+                            plan: element.REVCATPlan ? element.REVCATPlan : 'free',
+                            unsubscribed: element.unsubscribed ? element.unsubscribed : null,
+                            pro_day: element.pro_day ? element.pro_day : 0,
+                            cycle: element.cycle ? element.cycle : 0,
+                            userId: element.userId
+                        }
+                        const metadata = user[0].metadata;
+                        const userData = user[0].user;
+                        console.log(userData, "---userData---59");
+                        console.log(metadata, "---metadata---60");
+
+                        let executeUpdateDataQuery = `UPDATE public.metadata SET "revCatTrial" = :revCatTrial, 
+                            "renewalNumber" = :renewalNumber, plan = :plan, unsubscribed = :unsubscribed, 
+                            "pro_day" = :pro_day, cycle = :cycle,
+                            "last_updated" = :last_updated WHERE user_id = :userId`;
+                        const updateUser: any = await this.userModel?.sequelize?.query(executeUpdateDataQuery, {
+                            type: QueryTypes.UPDATE,
+                            raw: true,
+                            replacements: repObj,
+                        });
+                        console.log(updateUser, "---updateUser---71");
                     }
-                );
-
-                console.log(user, "---user---47");
-
-                const repObj = {
-                    revCatTrial: element.REVCATTRIALNOTRIAL ? element.REVCATTRIALNOTRIAL : null,
-                    renewalNumber: element.renewal_number ? element.renewal_number : null,
-                    plan: element.REVCATPlan ? element.REVCATPlan : 'free',
-                    unsubscribed: element.unsubscribed ? element.unsubscribed : null,
-                    pro_day: element.pro_day ? element.pro_day : 0,
-                    cycle: element.cycle ? element.cycle : 0,
-                    userId: element.userId
-                }
-
-                if (user.length > 0) {
-                    const metadata = user[0].metadata;
-                    const userData = user[0].user;
-                    console.log(userData, "---userData---52");
-                    console.log(metadata, "---metadata---53");
-
-                    let executeUpdateDataQuery = `UPDATE public.metadata SET "revCatTrial" = :revCatTrial, "renewalNumber" = :renewalNumber, plan = :plan, unsubscribed = :unsubscribed, "pro_day" = :pro_day, cycle = :cycle WHERE user_id = :userId`;
-
-                    const updateUser: any = await this.userModel?.sequelize?.query(executeUpdateDataQuery, {
-                        type: QueryTypes.UPDATE,
-                        raw: true,
-                        replacements: repObj,
-                    });
-                    console.log(updateUser, "---updateUser---61");
+                } else {
+                    console.log("Skipping userId: ", element.userId, "---element.userId---74");
                 }
             }
-
             return true;
         } catch (error) {
-            console.error(error, "---error---63");
-        }        
+            console.error(error, "---error---80");
+        }
     }
 
 }

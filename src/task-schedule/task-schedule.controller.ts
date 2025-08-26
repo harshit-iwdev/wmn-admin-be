@@ -15,11 +15,10 @@ export class TaskScheduleController {
         this.taskScheduleService.updateIngestDataCronService();
     }
 
-    // @Cron('30 * * * * *')
-    // // @Interval(10000)
-    // updateIngestDataCron() {
-    //     // this.taskScheduleService.updateIngestDataCronService();
-    //     console.log('---Called when the current second is 30---');
-    // }
+    @Cron('59 23 * * *')
+    updateIngestDataCron() {
+        console.log('---invoked scheduler for updating Ingest data---');
+        this.taskScheduleService.updateIngestDataCronService();
+    }
 
 }

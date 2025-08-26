@@ -7,6 +7,7 @@ import { DatabaseModule } from './database/database.module';
 import { UsersModule } from './users/users.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TaskScheduleModule } from './task-schedule/task-schedule.module';
+import { PractitionerModule } from './practitioner/practitioner.module';
 
 
 @Module({
@@ -20,6 +21,7 @@ import { TaskScheduleModule } from './task-schedule/task-schedule.module';
     UsersModule,
     AuthModule,
     TaskScheduleModule,
+    PractitionerModule,
   ],
   controllers: [AppController],
   providers: [AppService],

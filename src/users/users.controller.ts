@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { FilterDto, IResponse } from './dto/filter.dto';
 import { AuthGuard } from 'src/guards/authgaurd';
+import { User } from 'src/models';
 
 @Controller('users')
 export class UsersController {
@@ -22,7 +23,13 @@ export class UsersController {
     async getProUserCount() {
         return this.usersService.getProUserCount();
     }
-    
+
+    @UseGuards(AuthGuard)
+    @Get('/user-data-for-pdf')
+    async fetchUserDataForPdf() {
+        return this.usersService.fetchUserDataForPdf();
+    }
+
     @UseGuards(AuthGuard)
     @Get('/:id')
     async fetchSingleUserDetails(
@@ -75,6 +82,13 @@ export class UsersController {
         @Param('pageSize') pageSize: number
     ) {
         return this.usersService.fetchUserIntentions(id, pageNumber, pageSize);
+    }
+
+    @UseGuards(AuthGuard)
+    @Post('/create-new-user')
+    async createNewUser(@Body() userData: Partial<User>) {
+        console.log(userData, "---userData---");
+        return this.usersService.createNewUser(userData);
     }
 
 }

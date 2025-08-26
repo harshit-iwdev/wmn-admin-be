@@ -3,7 +3,10 @@ import { InjectModel } from '@nestjs/sequelize';
 import { User } from '../models';
 import { QueryTypes } from 'sequelize';
 import { FilterDto, IResponse } from './dto/filter.dto';
+import { Resend } from 'resend';
 
+// const resend = new Resend(process.env.NEXT_PUBLIC_SMTP_PASSWORD);
+// console.log(resend, "---resend---9")
 
 @Injectable()
 export class UsersService {
@@ -314,11 +317,13 @@ export class UsersService {
                 `SELECT COUNT(DISTINCT(M.user_id)) as "onboardedUserCount" FROM public.metadata AS M
                 WHERE M."onboarded" = true`);
 
-            return { success: true, data: {
-                proUserCount: proUserCount[0][0]?.proUserCount || 0,
-                activeUserCount: activeUserCount[0][0]?.activeUserCount || 0,
-                onboardedUserCount: onboardedUserCount[0][0]?.onboardedUserCount || 0
-            }, message: 'Pro user count fetched successfully' };
+            return {
+                success: true, data: {
+                    proUserCount: proUserCount[0][0]?.proUserCount || 0,
+                    activeUserCount: activeUserCount[0][0]?.activeUserCount || 0,
+                    onboardedUserCount: onboardedUserCount[0][0]?.onboardedUserCount || 0
+                }, message: 'Pro user count fetched successfully'
+            };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);
@@ -333,9 +338,96 @@ export class UsersService {
         return this.userModel.findOne({ where: { email } });
     }
 
-    async create(userData: Partial<User>): Promise<User> {
-        return this.userModel.create(userData);
+    async createNewUser(userData: Partial<User>): Promise<IResponse> {
+        try {
+            const newUser = await this.userModel.create(userData);
+
+            const displayName = userData.display_name ?? '';
+            const email = userData.email ?? '';
+            await this.sendRegistrationEmail(displayName, email);
+
+            return { success: true, data: newUser, message: 'User created successfully' };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
     }
+
+    async sendRegistrationEmail(displayName: string, email: string): Promise<any> {
+        try {
+            await this.sendEmail({
+                to: email,
+                subject: 'Welcome to Wise Mind Nutrition - Invitation',
+                html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <h2 style="color: #6b46c1;">Welcome to Wise Mind Nutrition!</h2>
+                  <p>Hello ${displayName},</p>
+                  <p>You have been invited to join Wise Mind Nutrition by your practitioner.</p>
+                  <p>You can now sign up through the mobile app using your email address: <strong>${email}</strong></p>
+                  <p>Get Android app from <a href="https://play.google.com/store/apps/details?id=com.wisemindnutrition.app">Google Play</a></p>
+                  <p>Get iOS app from <a href="https://apps.apple.com/us/app/wisemindnutrition/id6749000000">Apple App Store</a></p>
+                  <p>If you have any questions, please contact your practitioner.</p>
+                  <p>Best regards,<br>The Wise Mind Nutrition Team</p>
+                </div>
+              `
+            })
+        } catch (emailError: any) {
+            console.error('Email sending error:', emailError)
+            throw new BadRequestException(emailError.message || emailError);
+        }
+    }
+
+    async sendEmail(options: { to: string; subject: string; html: string; text?: string }) {
+        const mailOptions = {
+            from: process.env.NEXT_PUBLIC_SMTP_USER || 'noreply@yourdomain.com',
+            to: options.to,
+            subject: options.subject,
+            html: options.html,
+            text: options.text || options.html.replace(/<[^>]*>/g, ''),
+        }
+
+        const resend = new Resend(process.env.NEXT_PUBLIC_SMTP_PASSWORD)
+
+        try {
+            const info = await resend.emails.send({
+                from: 'Wise Mind Nutrition <noreply@wisemindnutrition.com>',
+                to: [mailOptions.to],
+                subject: mailOptions.subject,
+                html: mailOptions.html,
+            });
+            return { success: true, messageId: info }
+        } catch (error) {
+            console.error('Failed to send email:', error)
+            throw error
+        }
+    }
+
+    async fetchUserDataForPdf(): Promise<any> {
+        try {
+            let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as userMetadata, to_jsonb(S) as userSettings, to_jsonb(FL) as userFoodLogs, to_jsonb(I) as userIntentions, to_jsonb(P) as userPins, to_jsonb(R) as userReviews FROM auth.users as U 
+                join public.metadata as M on U.id = M.user_id
+                join public.settings as S on U.id = S."user_id"
+                left join public.food_logs as FL on U.id = FL."userId"
+                left join public.intentions as I on U.id = I."user_id"
+                left join public.pins as P on U.id = P."user_id"
+                left join public.reviews as R on U.id = R."user_id"
+                where U.last_seen IS NOT NULL ORDER BY U.last_seen DESC`;
+
+            const userData: any = await this.userModel?.sequelize?.query(
+                executeDataQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                }
+            );
+
+            return { success: true, data: userData, message: 'User data fetched successfully' };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
 
     async update(id: number, userData: Partial<User>): Promise<[number, User[]]> {
         return this.userModel.update(userData, {

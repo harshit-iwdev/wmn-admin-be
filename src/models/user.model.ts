@@ -26,7 +26,7 @@ export class User extends Model {
   @Column({ type: DataType.TEXT, allowNull: false, defaultValue: "" })
   avatar_url: string;
 
-  @Column({ type: DataType.STRING, allowNull: false })
+  @Column({ type: DataType.STRING, allowNull: false, defaultValue: "en" })
   locale: string;
 
   @Column({ type: DataType.STRING, allowNull: false, unique: true })

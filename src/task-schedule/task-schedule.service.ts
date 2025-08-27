@@ -51,8 +51,6 @@ export class TaskScheduleService {
                             renewalNumber: element.renewal_number ? element.renewal_number : null,
                             plan: element.REVCATPlan ? element.REVCATPlan : 'free',
                             unsubscribed: element.unsubscribed ? element.unsubscribed : null,
-                            // pro_day: element.pro_day ? element.pro_day : 0,
-                            // cycle: element.cycle ? element.cycle : 0,
                             userId: element.userId
                         }
                         const metadata = user[0].metadata;
@@ -61,9 +59,8 @@ export class TaskScheduleService {
                         console.log(metadata, "---metadata---60");
 
                         let executeUpdateDataQuery = `UPDATE public.metadata SET "revCatTrial" = :revCatTrial, 
-                            "renewalNumber" = :renewalNumber, plan = :plan, unsubscribed = :unsubscribed, 
-                            "pro_day" = :pro_day, cycle = :cycle,
-                            "last_updated" = :last_updated WHERE user_id = :userId`;
+                            "renewalNumber" = :renewalNumber, plan = :plan, unsubscribed = :unsubscribed
+                            WHERE user_id = :userId`;
                         const updateUser: any = await this.userModel?.sequelize?.query(executeUpdateDataQuery, {
                             type: QueryTypes.UPDATE,
                             raw: true,

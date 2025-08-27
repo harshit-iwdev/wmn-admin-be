@@ -5,6 +5,7 @@ import { User } from 'src/models';
 import { InjectModel } from '@nestjs/sequelize';
 import { QueryTypes } from 'sequelize';
 import * as fs from 'fs';
+import * as csv from 'csv-parser';
 
 @Injectable()
 export class TaskScheduleService {
@@ -83,101 +84,81 @@ export class TaskScheduleService {
 
     // async updateUserProCycleData() {
     //     try {
-    //         const dbData = fs.readFileSync('src/task-schedule/dbData.json', 'utf8');
-    //         const dbDataPeople = JSON.parse(dbData);
-    //         console.log(dbDataPeople, "---dbDataPeople---91");
+    //         // Parse CSV file
+    //         const results: any[] = [];
+    //         const skippedUserIds: string[] = [];
+    //         return new Promise((resolve, reject) => {
+    //             fs.createReadStream('src/task-schedule/metadata.csv')
+    //                 .pipe(csv())
+    //                 .on('data', (data) => results.push(data))
+    //                 .on('end', async () => {
+    //                     try {
+    //                         console.log(results.length, "---CSV records loaded---");
+                            
+    //                         // Process each record
+    //                         for (let i = 0; i < results.length; i++) {
+    //                             const element = results[i];
+    //                             console.log(element, "---element---93");
 
-    //         let skippedUserIds: string[] = [];
+    //                             // Validate UUID format before processing
+    //                             const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    //                             if (!uuidRegex.test(element.user_id)) {
+    //                                 console.log(`Skipping invalid UUID: ${element.user_id} at index ${i}`);
+    //                                 skippedUserIds.push(element.user_id);
+    //                                 continue;
+    //                             }
 
-    //         const apiKey = this.configService.get('INGEST_API_KEY');
-    //         const ingestData = await axios.get(`https://api.encharge.io/v1/segments/956329/people?limit=10000&order=asc&ignoreAnonymous=true&sort=firstName`, {
-    //             headers: {
-    //                 'X-Encharge-Token': apiKey,
-    //                 'Content-Type': 'application/json',
-    //             },
+    //                             try {
+    //                                 const user = await this.userModel?.sequelize?.query(
+    //                                     `SELECT * FROM public.metadata WHERE user_id = :id`,
+    //                                     {
+    //                                         type: QueryTypes.SELECT,
+    //                                         raw: true,
+    //                                         replacements: { id: element.user_id },
+    //                                     }
+    //                                 );
+    //                                 console.log(user, "---user---95");
+                                    
+    //                                 if (user && user.length > 0) {
+    //                                     const repObj = {
+    //                                         pro_day: element.pro_day ? parseFloat(element.pro_day) : 0,
+    //                                         cycle: element.cycle ? parseFloat(element.cycle) : 0,
+    //                                         userId: element.user_id
+    //                                     }
+
+    //                                     let executeUpdateDataQuery = `UPDATE public.metadata SET "pro_day" = :pro_day, cycle = :cycle WHERE user_id = :userId`;
+    //                                     const updateUser: any = await this.userModel?.sequelize?.query(executeUpdateDataQuery, {
+    //                                         type: QueryTypes.UPDATE,
+    //                                         raw: true,
+    //                                         replacements: repObj,
+    //                                     });
+    //                                     console.log(updateUser, "---updateUser---71");
+    //                                 }
+    //                             } catch (dbError) {
+    //                                 console.error(`Database error for userId ${element.user_id}:`, dbError);
+    //                                 // Continue processing other records even if one fails
+    //                                 continue;
+    //                             }
+    //                         }
+                            
+    //                         console.log("results", results);
+    //                         console.log(skippedUserIds, "---skippedUserIds---144");
+    //                         console.log("CSV processing completed successfully");
+    //                         resolve(true);
+    //                     } catch (error) {
+    //                         console.error("Error processing CSV data:", error);
+    //                         reject(error);
+    //                     }
+    //                 })
+    //                 .on('error', (error) => {
+    //                     console.error("Error reading CSV file:", error);
+    //                     reject(error);
+    //                 });
     //         });
-    //         console.log(ingestData.data.people.length, "---ingestData---26");
-    //         const ingestDataPeople = ingestData.data.people;
 
-    //         for (let i = 0; i < ingestDataPeople.length; i++) {
-    //             const element = ingestDataPeople[i];
-    //             console.log(element, "---element---93");
-
-    //             const dbDataUser = dbDataPeople.find(user => user.userId === element.userId);
-    //             console.log(dbDataUser, "---dbDataUser---107");
-
-    //             if (dbDataUser) {
-    //                 const user = await this.userModel?.sequelize?.query(
-    //                     `SELECT * FROM public.metadata WHERE user_id = :id`,
-    //                     {
-    //                         type: QueryTypes.SELECT,
-    //                         raw: true,
-    //                         replacements: { id: (element.userId as string) },
-    //                     }
-    //                 );
-    //                 console.log(user, "---user---95");
-
-    //                 if (user && user.length > 0) {
-    //                     const repObj = {
-    //                         pro_day: dbDataUser.proDay ? dbDataUser.proDay : 0,
-    //                         cycle: dbDataUser.cycle ? dbDataUser.cycle : 0,
-    //                         userId: element.userId
-    //                     }
-    //                     let executeUpdateDataQuery = `UPDATE public.metadata SET "pro_day" = :pro_day, cycle = :cycle WHERE user_id = :userId`;
-    //                     const updateUser: any = await this.userModel?.sequelize?.query(executeUpdateDataQuery, {
-    //                         type: QueryTypes.UPDATE,
-    //                         raw: true,
-    //                         replacements: repObj,
-    //                         });
-    //                     console.log(updateUser, "---updateUser---71");
-    //                 }
-    //             }
-
-    //             // // Validate UUID format before processing
-    //             // const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    //             // if (!uuidRegex.test(element.userId)) {
-    //             //     console.log(`Skipping invalid UUID: ${element.userId} at index ${i}`);
-    //             //     skippedUserIds.push(element.userId);
-    //             //     continue;
-    //             // }
-
-    //             // try {
-    //             //     const user = await this.userModel?.sequelize?.query(
-    //             //         `SELECT * FROM public.metadata WHERE user_id = :id`,
-    //             //         {
-    //             //             type: QueryTypes.SELECT,
-    //             //             raw: true,
-    //             //             replacements: { id: (element.userId as string) },
-    //             //         }
-    //             //     );
-    //             //     console.log(user, "---user---95");
-                    
-    //             //     if (user && user.length > 0) {
-    //             //         const repObj = {
-    //             //             pro_day: element.proDay ? element.proDay : 0,
-    //             //             cycle: element.cycle ? element.cycle : 0,
-    //             //             userId: element.userId
-    //             //         }
-
-    //             //         let executeUpdateDataQuery = `UPDATE public.metadata SET "pro_day" = :pro_day, cycle = :cycle WHERE user_id = :userId`;
-    //             //         const updateUser: any = await this.userModel?.sequelize?.query(executeUpdateDataQuery, {
-    //             //             type: QueryTypes.UPDATE,
-    //             //             raw: true,
-    //             //             replacements: repObj,
-    //             //         });
-    //             //         console.log(updateUser, "---updateUser---71");
-    //             //     }
-    //             // } catch (dbError) {
-    //             //     console.error(`Database error for userId ${element.userId}:`, dbError);
-    //             //     // Continue processing other records even if one fails
-    //             //     continue;
-    //             // }
-    //         }
-
-    //         console.log(JSON.stringify(skippedUserIds), "---skippedUserIds---139");
-    //         console.log(skippedUserIds.length, "---skippedUserIds.length---140");
     //     } catch (error) {
     //         console.error(error, "---error---89");
+    //         throw error;
     //     }
     // }
 

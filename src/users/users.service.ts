@@ -134,22 +134,22 @@ export class UsersService {
             userData.followerCount = follower[0]?.followingCount || 0;
             userData.followingCount = following[0]?.followerCount || 0;
 
-            let executeActivityDataQuery = `SELECT COUNT(FL.id) as "foodLogs", COUNT(I.id) as "intentions", COUNT(P.id) as "pins"
-                FROM public.food_logs AS FL
-                LEFT JOIN public.intentions AS I ON FL."userId" = I."user_id"
-                LEFT JOIN public.pins AS P ON FL."userId" = P."user_id"
-                WHERE FL."userId" = :id`;
-
-            const activityData: any = await this.userModel?.sequelize?.query(
-                executeActivityDataQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                    replacements: { id: id },
-                }
+            const executeLogCountsQuery = `SELECT
+                (SELECT COUNT(*) FROM public.food_logs WHERE "userId" = :id) AS "foodLogs",
+                (SELECT COUNT(*) FROM public.reviews WHERE "user_id" = :id) AS "reviews",
+                (SELECT COUNT(*) FROM public.pins WHERE "user_id" = :id) AS "pins",
+                (SELECT COUNT(*) FROM public.intentions WHERE "user_id" = :id) AS "intentions"`;
+  
+            const logCounts: any = await this.userModel?.sequelize?.query(
+              executeLogCountsQuery,
+              {
+                type: QueryTypes.SELECT,
+                raw: true,
+                replacements: { id },
+              }
             );
 
-            userData.activityData = activityData[0] || { foodLogs: 0, intentions: 0, pins: 0 };
+            userData.activityData = { foodLogs: logCounts[0]?.foodLogs || 0, reviews: logCounts[0]?.reviews || 0, pins: logCounts[0]?.pins || 0, intentions: logCounts[0]?.intentions || 0 };
             return { success: true, data: userData, message: 'User details fetched successfully' };
         } catch (error) {
             console.error(error, "---error---");
@@ -159,7 +159,7 @@ export class UsersService {
 
     async fetchUserFollowers(id: string): Promise<any> {
         try {
-            let executeFollowersQuery = `SELECT U.id, U.email, U.display_name, U.last_seen, U.avatar_url,
+            let executeFollowersQuery = `SELECT U.id, U.email, U.display_name, U.last_seen, U.avatar_url, U.created_at,
                 M.first_name, M.last_name, M.user_type, M.username
                 FROM auth.users AS U
                 JOIN public.user_follows AS UF ON U.id = UF."user_id"
@@ -184,7 +184,7 @@ export class UsersService {
 
     async fetchUserFollowing(id: string): Promise<any> {
         try {
-            let executeFollowingQuery = `SELECT U.id, U.email, U.display_name, U.last_seen, U.avatar_url,
+            let executeFollowingQuery = `SELECT U.id, U.email, U.display_name, U.last_seen, U.avatar_url, U.created_at,
                 M.first_name, M.last_name, M.user_type, M.username
                 FROM auth.users AS U
                 JOIN public.user_follows AS UF ON U.id = UF."follow_user_id"

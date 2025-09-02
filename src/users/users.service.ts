@@ -139,14 +139,14 @@ export class UsersService {
                 (SELECT COUNT(*) FROM public.reviews WHERE "user_id" = :id) AS "reviews",
                 (SELECT COUNT(*) FROM public.pins WHERE "user_id" = :id) AS "pins",
                 (SELECT COUNT(*) FROM public.intentions WHERE "user_id" = :id) AS "intentions"`;
-  
+
             const logCounts: any = await this.userModel?.sequelize?.query(
-              executeLogCountsQuery,
-              {
-                type: QueryTypes.SELECT,
-                raw: true,
-                replacements: { id },
-              }
+                executeLogCountsQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id },
+                }
             );
 
             userData.activityData = { foodLogs: logCounts[0]?.foodLogs || 0, reviews: logCounts[0]?.reviews || 0, pins: logCounts[0]?.pins || 0, intentions: logCounts[0]?.intentions || 0 };
@@ -207,6 +207,44 @@ export class UsersService {
         }
     }
 
+    // async fetchUserFoodLogs(id: string, pageNumber: number, pageSize: number): Promise<any> {
+    //     try {
+    //         const offset = (pageNumber - 1) * pageSize;
+    //         let executeFoodLogsQuery = `SELECT to_jsonb(FL) as "foodLogs", to_jsonb(AIFR) as "aiFoodRecognition"
+    //             FROM public.food_logs AS FL
+    //             LEFT JOIN public.ai_food_recognition AS AIFR ON FL."ai_food_data_id" = AIFR.id
+    //             WHERE FL."userId" = :id
+    //             ORDER BY FL."created_at" DESC
+    //             LIMIT :pageSize OFFSET :offset`;
+
+    //         const foodLogs: any = await this.userModel?.sequelize?.query(
+    //             executeFoodLogsQuery,
+    //             {
+    //                 type: QueryTypes.SELECT,
+    //                 raw: true,
+    //                 replacements: { id: id, pageSize: pageSize, offset: offset },
+    //             }
+    //         );
+
+    //         let executeFoodLogsCountQuery = `SELECT COUNT(FL.id) as "count" FROM public.food_logs AS FL
+    //             WHERE FL."userId" = :id`;
+
+    //         const foodLogsCount: any = await this.userModel?.sequelize?.query(
+    //             executeFoodLogsCountQuery,
+    //             {
+    //                 type: QueryTypes.SELECT,
+    //                 raw: true,
+    //                 replacements: { id: id },
+    //             }
+    //         );
+
+    //         return { success: true, data: { rows: foodLogs, count: foodLogsCount[0]?.count || 0 }, message: 'User food logs fetched successfully' };
+    //     } catch (error) {
+    //         console.error(error, "---error---");
+    //         throw new BadRequestException(error.message);
+    //     }
+    // }
+
     async fetchUserFoodLogs(id: string, pageNumber: number, pageSize: number): Promise<any> {
         try {
             const offset = (pageNumber - 1) * pageSize;
@@ -215,7 +253,8 @@ export class UsersService {
                 LEFT JOIN public.ai_food_recognition AS AIFR ON FL."ai_food_data_id" = AIFR.id
                 WHERE FL."userId" = :id
                 ORDER BY FL."created_at" DESC
-                LIMIT :pageSize OFFSET :offset`;
+                -- LIMIT :pageSize OFFSET :offset
+                `;
 
             const foodLogs: any = await this.userModel?.sequelize?.query(
                 executeFoodLogsQuery,
@@ -225,6 +264,60 @@ export class UsersService {
                     replacements: { id: id, pageSize: pageSize, offset: offset },
                 }
             );
+
+            // Calculate real food group distribution
+            const foodGroupCounts = {
+                fruit: 0,
+                vegetable: 0,
+                grain: 0,
+                dairy: 0,
+                protein: 0,
+                beansNutsSeeds: 0,
+                wildcard: 0
+            }
+            
+            // Calculate average food logs per day
+            let averageLogsPerDay = 0;
+            let totalDays = 0;
+            
+            if (foodLogs.length > 0) {
+                // Get the date range from first to last log
+                const firstLogDate = new Date(foodLogs[foodLogs.length - 1]?.foodLogs?.created_at);
+                const lastLogDate = new Date(foodLogs[0]?.foodLogs?.created_at);
+                
+                // Calculate days between first and last log (inclusive)
+                const timeDiff = lastLogDate.getTime() - firstLogDate.getTime();
+                totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates
+                
+                // Calculate average logs per day
+                averageLogsPerDay = totalDays > 0 ? parseFloat((foodLogs.length / totalDays).toFixed(2)) : 0;
+            }
+            
+            foodLogs.forEach((log: any) => {
+                if (log.foodLogs.food_groups) {
+                    let groups: string[] = []
+
+                    // Handle different data types for foodGroups
+                    if (typeof log.foodLogs.food_groups === 'string') {
+                        groups = log.foodLogs.food_groups.split(',').map((g: string) => g.trim())
+                    } else if (Array.isArray(log.foodLogs.food_groups)) {
+                        groups = log.foodLogs.food_groups.map((g: any) => typeof g === 'string' ? g : JSON.stringify(g))
+                    } else if (typeof log.foodLogs.food_groups === 'object') {
+                        // If it's an object, try to extract values
+                        groups = Object.values(log.foodLogs.food_groups).map((v: any) => typeof v === 'string' ? v : JSON.stringify(v))
+                    }
+                    groups.forEach((group: string) => {
+                        const trimmed = group.toLowerCase()
+                        if (trimmed.includes('f') || trimmed.includes('F')) foodGroupCounts.fruit++
+                        else if (trimmed.includes('v') || trimmed.includes('V')) foodGroupCounts.vegetable++
+                        else if (trimmed.includes('g') || trimmed.includes('G')) foodGroupCounts.grain++
+                        else if (trimmed.includes('d') || trimmed.includes('D')) foodGroupCounts.dairy++
+                        else if (trimmed.includes('p') || trimmed.includes('P')) foodGroupCounts.protein++
+                        else if (trimmed.includes('bns') || trimmed.includes('nut') || trimmed.includes('seed')) foodGroupCounts.beansNutsSeeds++
+                        else foodGroupCounts.wildcard++
+                    })
+                }
+            })
 
             let executeFoodLogsCountQuery = `SELECT COUNT(FL.id) as "count" FROM public.food_logs AS FL
                 WHERE FL."userId" = :id`;
@@ -238,7 +331,27 @@ export class UsersService {
                 }
             );
 
-            return { success: true, data: { rows: foodLogs, count: foodLogsCount[0]?.count || 0 }, message: 'User food logs fetched successfully' };
+            let executeFoodLogsArchivedQuery = `SELECT * FROM public.food_group_archives AS FGA
+                WHERE FGA."userId" = :id`;
+
+            const foodLogsArchived: any = await this.userModel?.sequelize?.query(
+                executeFoodLogsArchivedQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id },
+                }
+            );
+
+            const result = {
+                foodLogs: { rows: foodLogs, count: foodLogsCount[0]?.count || 0 },
+                foodLogsArchived: { rows: foodLogsArchived },
+                foodGroupDistribution: foodGroupCounts,
+                averageLogsPerDay: averageLogsPerDay,
+                totalDays: totalDays
+            }
+
+            return { success: true, data: result, message: 'User food logs fetched successfully' };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);

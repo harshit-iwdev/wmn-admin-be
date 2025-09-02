@@ -107,8 +107,8 @@ export class UsersService {
 
             const userData = user[0];
 
-            let executeFollowerQuery = `SELECT COUNT("follow_user_id") AS "followingCount"
-                FROM public.user_follows WHERE "user_id" = :id`;
+            let executeFollowerQuery = `SELECT COUNT("user_id") AS "followerCount"
+                FROM public.user_follows WHERE "follow_user_id" = :id`;
 
             const follower: any = await this.userModel?.sequelize?.query(
                 executeFollowerQuery,
@@ -119,8 +119,8 @@ export class UsersService {
                 }
             );
 
-            let executeFollowingQuery = `SELECT COUNT("user_id") AS "followerCount"
-                FROM public.user_follows WHERE "follow_user_id" = :id`;
+            let executeFollowingQuery = `SELECT COUNT("follow_user_id") AS "followingCount"
+                FROM public.user_follows WHERE "user_id" = :id`;
 
             const following: any = await this.userModel?.sequelize?.query(
                 executeFollowingQuery,
@@ -131,8 +131,8 @@ export class UsersService {
                 }
             );
 
-            userData.followerCount = follower[0]?.followingCount || 0;
-            userData.followingCount = following[0]?.followerCount || 0;
+            userData.followerCount = follower[0]?.followerCount || 0;
+            userData.followingCount = following[0]?.followingCount || 0;
 
             const executeLogCountsQuery = `SELECT
                 (SELECT COUNT(*) FROM public.food_logs WHERE "userId" = :id) AS "foodLogs",

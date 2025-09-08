@@ -10,3 +10,9 @@ export class FilterDto {
     sortOrder: string;
     selectedRole: string;
 }
+
+export class FoodLogsFilterDto {
+    id: string;
+    startDate: string;
+    endDate: string;
+}

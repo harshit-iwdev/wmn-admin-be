@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { FilterDto, IResponse } from './dto/filter.dto';
+import { FilterDto, FoodLogsFilterDto, IResponse } from './dto/filter.dto';
 import { AuthGuard } from 'src/guards/authgaurd';
 import { User } from 'src/models';
 
@@ -55,13 +55,11 @@ export class UsersController {
     }
 
     @UseGuards(AuthGuard)
-    @Get('/food-logs/:id/:pageNumber/:pageSize')
+    @Post('/food-logs')
     async fetchUserFoodLogs(
-        @Param('id') id: string,
-        @Param('pageNumber') pageNumber: number,
-        @Param('pageSize') pageSize: number
+        @Body() body: FoodLogsFilterDto
     ) {
-        return this.usersService.fetchUserFoodLogs(id, pageNumber, pageSize);
+        return this.usersService.fetchUserFoodLogs(body);
     }
 
     @UseGuards(AuthGuard)

@@ -389,6 +389,50 @@ export class UsersService {
         }
     }
 
+    async fetchUserFoodLogJournal(id: string, pageNumber: number, pageSize: number): Promise<any> {
+        try {
+            const offset = (pageNumber - 1) * pageSize;
+            // let executeFoodLogJournalQuery = `SELECT FL."hunger", FL."consumed", FL."userId", FL."fullness", FL."extra1", FL."extra2", FL."food_type", FL."created_at",
+            //     R."whatWentWell", R."whatCouldBeBetter", R."correctiveMeasures", R."thoughts"
+            //     FROM public.reviews as R JOIN public.food_logs as FL ON FL.id = R."foodLogId" 
+            //     WHERE R."user_id" = :id ORDER BY R."created_at" DESC LIMIT :pageSize OFFSET :offset`;
+
+            const executeFoodLogJournalQuery = `SELECT FL."hunger", FL."consumed", FL."userId", FL."fullness", FL."extra1", FL."extra2", FL."food_type", FL."created_at" AS food_log_created_at,
+                R."whatWentWell", R."whatCouldBeBetter", R."correctiveMeasures", R."thoughts", R."created_at" AS review_created_at
+                FROM public.reviews AS R
+                LEFT JOIN public.review_food_logs AS RFL ON R.id = RFL."review_id"
+                LEFT JOIN public.food_logs AS FL ON FL.id = RFL."food_log_id"
+                WHERE R."user_id" = :id
+                ORDER BY R."created_at" DESC
+                LIMIT :pageSize OFFSET :offset`;
+            const foodLogJournal: any = await this.userModel?.sequelize?.query(
+                executeFoodLogJournalQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id, pageSize: pageSize, offset: offset },
+                }
+            );
+
+            let executeFoodLogJournalCountQuery = `SELECT COUNT(id) as "count" FROM public.reviews WHERE "user_id" = :id`;
+
+            const foodLogJournalCount: any = await this.userModel?.sequelize?.query(
+                executeFoodLogJournalCountQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id },
+                }
+            );
+
+            return { success: true, data: { rows: foodLogJournal, count: foodLogJournalCount[0]?.count || 0 }, message: 'User food log journal fetched successfully' };
+        }
+        catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
     async fetchUserReviews(id: string, pageNumber: number, pageSize: number): Promise<any> {
         try {
             const offset = (pageNumber - 1) * pageSize;

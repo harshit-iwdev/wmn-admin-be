@@ -63,6 +63,16 @@ export class UsersController {
     }
 
     @UseGuards(AuthGuard)
+    @Get('/food-log-journal/:id/:pageNumber/:pageSize')
+    async fetchUserFoodLogJournal(
+        @Param('id') id: string,
+        @Param('pageNumber') pageNumber: number,
+        @Param('pageSize') pageSize: number
+    ) {
+        return this.usersService.fetchUserFoodLogJournal(id, pageNumber, pageSize);
+    }
+
+    @UseGuards(AuthGuard)
     @Get('/reviews/:id/:pageNumber/:pageSize')
     async fetchUserReviews(
         @Param('id') id: string,

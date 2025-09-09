@@ -459,25 +459,12 @@ export class UsersService {
 async fetchUserFoodLogs(payload: FoodLogsFilterDto): Promise<any> {
     try {
         const { id, startDate, endDate } = payload;
-        // let executeFoodLogsQuery = `SELECT to_jsonb(FL) as "foodLogs", to_jsonb(AIFR) as "aiFoodRecognition"
-        //     FROM public.food_logs AS FL
-        //     LEFT JOIN public.ai_food_recognition AS AIFR ON FL."ai_food_data_id" = AIFR.id
-        //     WHERE FL."userId" = :id and FL."created_at" >= :startDate and FL."created_at" <= :endDate
-        //     ORDER BY FL."created_at" DESC`;
 
-
-        let executeFoodLogsQuery = `SELECT 
-DATE(FL."created_at") AS log_date,
-jsonb_agg(to_jsonb(FL."food_groups")) AS "foodLogs",
-jsonb_agg(to_jsonb(AIFR)) AS "aiFoodRecognition"
-FROM public.food_logs AS FL
-LEFT JOIN public.ai_food_recognition AS AIFR 
-ON FL."ai_food_data_id" = AIFR.id
-WHERE FL."userId" = :id
-AND FL."created_at" >= :startDate
-AND FL."created_at" <= :endDate
-GROUP BY DATE(FL."created_at")
-ORDER BY log_date ASC;`;
+        let executeFoodLogsQuery = `SELECT DATE(FL."created_at") AS log_date, jsonb_agg(to_jsonb(FL."food_groups")) AS "foodLogs",
+            jsonb_agg(to_jsonb(AIFR)) AS "aiFoodRecognition" FROM public.food_logs AS FL
+            LEFT JOIN public.ai_food_recognition AS AIFR ON FL."ai_food_data_id" = AIFR.id
+            WHERE FL."userId" = :id AND FL."created_at" >= :startDate AND FL."created_at" <= :endDate
+            GROUP BY DATE(FL."created_at") ORDER BY log_date ASC;`;
 
         const foodLogs: any = await this.userModel?.sequelize?.query(
             executeFoodLogsQuery,
@@ -513,26 +500,13 @@ ORDER BY log_date ASC;`;
                 replacements: { id: id, startDate: startDate, endDate: endDate },
             }
         );
-console.log(foodLogs.length, foodLogs[0], "---foodLogs---292");
+
         let consecutive = 0;
         // data from food logs
         foodLogs.forEach((log: any) => {
             if (log.foodLogs && log.foodLogs.length > 0) {
-                let groups: string[] = []
-
                 const oneGroup = log.foodLogs.flat();
-
-                // Handle different data types for foodGroups
-                if (typeof oneGroup === 'string') {
-                    groups = oneGroup.split(',').map((g: string) => g.trim())
-                } else if (Array.isArray(oneGroup)) {
-                    groups = oneGroup.map((g: any) => typeof g === 'string' ? g : JSON.stringify(g))
-                } else if (typeof oneGroup === 'object') {
-                    // If it's an object, try to extract values
-                    groups = Object.values(oneGroup).map((v: any) => typeof v === 'string' ? v : JSON.stringify(v))
-                }
-                console.log(groups, "---groups---308");
-                const grp = groups.map((group: string) => group.toLowerCase());
+                let grp = oneGroup.map((group: string) => group.toLowerCase());
                 grp.forEach((g: string) => {
                     if (g === 'f') foodGroupCounts.fruit++
                     else if (g === 'v') foodGroupCounts.vegetable++
@@ -550,10 +524,8 @@ console.log(foodLogs.length, foodLogs[0], "---foodLogs---292");
                 if (hasAllGroups) {
                     consecutive++;
                 }
-                console.log(consecutive, "---consecutive---328");
             }
         });
-        console.log(consecutive, "---consecutive---331");
 
         let executeAllArchivedFoodLogsQuery = `SELECT * FROM public.food_group_archives AS FGA
             WHERE FGA."userId" = :id`;
@@ -565,7 +537,6 @@ console.log(foodLogs.length, foodLogs[0], "---foodLogs---292");
                 replacements: { id: id },
             }
         );
-        console.log(rangedArchivedFoodLogs.length, "---rangedArchivedFoodLogs---343");
         // data from archived food logs
         rangedArchivedFoodLogs.forEach((log: any) => {
             if (log.food_groups) {
@@ -595,7 +566,6 @@ console.log(foodLogs.length, foodLogs[0], "---foodLogs---292");
                         foodGroupCounts.wildcard += groupCount;
                     }
                 })
-
                 // calculate consecutive logs
                 const foodGroupsOrder = ['f', 'v', 'g', 'd', 'p', 'bns'];
                 const uniqueFoodGroups = [...new Set(consecKey)];
@@ -605,7 +575,7 @@ console.log(foodLogs.length, foodLogs[0], "---foodLogs---292");
                 }
             }
         });
-        console.log(consecutive, "---conseutive---384");
+
         // Calculate days between first and last log (inclusive)
         const timeDiff = new Date(endDate).getTime() - new Date(startDate).getTime();
         let totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates

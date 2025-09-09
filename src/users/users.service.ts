@@ -208,434 +208,186 @@ export class UsersService {
         }
     }
 
-    // async fetchUserFoodLogs(id: string, pageNumber: number, pageSize: number): Promise<any> {
-    //     try {
-    //         const offset = (pageNumber - 1) * pageSize;
-    //         let executeFoodLogsQuery = `SELECT to_jsonb(FL) as "foodLogs", to_jsonb(AIFR) as "aiFoodRecognition"
-    //             FROM public.food_logs AS FL
-    //             LEFT JOIN public.ai_food_recognition AS AIFR ON FL."ai_food_data_id" = AIFR.id
-    //             WHERE FL."userId" = :id
-    //             ORDER BY FL."created_at" DESC
-    //             LIMIT :pageSize OFFSET :offset`;
+    async fetchUserFoodLogs(payload: FoodLogsFilterDto): Promise<any> {
+        try {
+            const { id, startDate, endDate } = payload;
 
-    //         const foodLogs: any = await this.userModel?.sequelize?.query(
-    //             executeFoodLogsQuery,
-    //             {
-    //                 type: QueryTypes.SELECT,
-    //                 raw: true,
-    //                 replacements: { id: id, pageSize: pageSize, offset: offset },
-    //             }
-    //         );
+            let executeFoodLogsQuery = `SELECT DATE(FL."created_at") AS log_date, jsonb_agg(to_jsonb(FL."food_groups")) AS "foodLogs",
+                jsonb_agg(to_jsonb(AIFR)) AS "aiFoodRecognition" FROM public.food_logs AS FL
+                LEFT JOIN public.ai_food_recognition AS AIFR ON FL."ai_food_data_id" = AIFR.id
+                WHERE FL."userId" = :id AND FL."created_at" >= :startDate AND FL."created_at" <= :endDate
+                GROUP BY DATE(FL."created_at") ORDER BY log_date ASC;`;
 
-    //         let executeFoodLogsCountQuery = `SELECT COUNT(FL.id) as "count" FROM public.food_logs AS FL
-    //             WHERE FL."userId" = :id`;
-
-    //         const foodLogsCount: any = await this.userModel?.sequelize?.query(
-    //             executeFoodLogsCountQuery,
-    //             {
-    //                 type: QueryTypes.SELECT,
-    //                 raw: true,
-    //                 replacements: { id: id },
-    //             }
-    //         );
-
-    //         return { success: true, data: { rows: foodLogs, count: foodLogsCount[0]?.count || 0 }, message: 'User food logs fetched successfully' };
-    //     } catch (error) {
-    //         console.error(error, "---error---");
-    //         throw new BadRequestException(error.message);
-    //     }
-    // }
-
-//     async fetchUserFoodLogs(payload: FoodLogsFilterDto): Promise<any> {
-//         try {
-//             const { id, startDate, endDate } = payload;
-//             // let executeFoodLogsQuery = `SELECT to_jsonb(FL) as "foodLogs", to_jsonb(AIFR) as "aiFoodRecognition"
-//             //     FROM public.food_logs AS FL
-//             //     LEFT JOIN public.ai_food_recognition AS AIFR ON FL."ai_food_data_id" = AIFR.id
-//             //     WHERE FL."userId" = :id and FL."created_at" >= :startDate and FL."created_at" <= :endDate
-//             //     ORDER BY FL."created_at" DESC`;
-
-
-//             let executeFoodLogsQuery = `SELECT 
-//     DATE(FL."created_at") AS log_date,
-//     jsonb_agg(to_jsonb(FL."food_groups")) AS "foodLogs",
-//     jsonb_agg(to_jsonb(AIFR)) AS "aiFoodRecognition"
-// FROM public.food_logs AS FL
-// LEFT JOIN public.ai_food_recognition AS AIFR 
-//     ON FL."ai_food_data_id" = AIFR.id
-// WHERE FL."userId" = :id
-//   AND FL."created_at" >= :startDate
-//   AND FL."created_at" <= :endDate
-// GROUP BY DATE(FL."created_at")
-// ORDER BY log_date ASC;`;
-
-//             const foodLogs: any = await this.userModel?.sequelize?.query(
-//                 executeFoodLogsQuery,
-//                 {
-//                     type: QueryTypes.SELECT,
-//                     raw: true,
-//                     replacements: {
-//                         id: id,
-//                         startDate: startDate,
-//                         endDate: endDate
-//                     },
-//                 }
-//             );
-//             // Calculate real food group distribution
-//             const foodGroupCounts = {
-//                 fruit: 0,
-//                 vegetable: 0,
-//                 grain: 0,
-//                 dairy: 0,
-//                 protein: 0,
-//                 beansNutsSeeds: 0,
-//                 wildcard: 0
-//             }
-
-//             let executeRangedArchivedFoodLogsQuery = `SELECT * FROM public.food_group_archives AS FGA
-//                 WHERE FGA."userId" = :id and Date(FGA."start_date") >= :startDate and Date(FGA."end_date") <= :endDate`;
-
-//             const rangedArchivedFoodLogs: any = await this.userModel?.sequelize?.query(
-//                 executeRangedArchivedFoodLogsQuery,
-//                 {
-//                     type: QueryTypes.SELECT,
-//                     raw: true,
-//                     replacements: { id: id, startDate: startDate, endDate: endDate },
-//                 }
-//             );
-// console.log(foodLogs.length, foodLogs[0], "---foodLogs---292");
-//             let consecutive = 0;
-//             // data from food logs
-//             foodLogs.forEach((log: any) => {
-//                 if (log.foodLogs.food_groups) {
-//                     let groups: string[] = []
-
-//                     // Handle different data types for foodGroups
-//                     if (typeof log.foodLogs.food_groups === 'string') {
-//                         groups = log.foodLogs.food_groups.split(',').map((g: string) => g.trim())
-//                     } else if (Array.isArray(log.foodLogs.food_groups)) {
-//                         groups = log.foodLogs.food_groups.map((g: any) => typeof g === 'string' ? g : JSON.stringify(g))
-//                     } else if (typeof log.foodLogs.food_groups === 'object') {
-//                         // If it's an object, try to extract values
-//                         groups = Object.values(log.foodLogs.food_groups).map((v: any) => typeof v === 'string' ? v : JSON.stringify(v))
-//                     }
-//                     console.log(groups, "---groups---308");
-//                     const grp = groups.map((group: string) => group.toLowerCase());
-//                     grp.forEach((g: string) => {
-//                         if (g === 'f') foodGroupCounts.fruit++
-//                         else if (g === 'v') foodGroupCounts.vegetable++
-//                         else if (g === 'g') foodGroupCounts.grain++
-//                         else if (g === 'd') foodGroupCounts.dairy++
-//                         else if (g === 'p') foodGroupCounts.protein++
-//                         else if (g === 'bns') foodGroupCounts.beansNutsSeeds++
-//                         else foodGroupCounts.wildcard++;
-//                     })
-
-//                     // calculate consecutive logs
-//                     const foodGroupsOrder = ['f', 'v', 'g', 'd', 'p', 'bns'];
-//                     const uniqueFoodGroups = [...new Set(grp)];
-//                     const hasAllGroups = foodGroupsOrder.every(g => uniqueFoodGroups.includes(g));
-//                     if (hasAllGroups) {
-//                         consecutive++;
-//                     }
-//                     console.log(consecutive, "---consecutive---328");
-//                 }
-//             });
-//             console.log(consecutive, "---consecutive---331");
-
-//             let executeAllArchivedFoodLogsQuery = `SELECT * FROM public.food_group_archives AS FGA
-//                 WHERE FGA."userId" = :id`;
-//             const allArchivedFoodLogs: any = await this.userModel?.sequelize?.query(
-//                 executeAllArchivedFoodLogsQuery,
-//                 {
-//                     type: QueryTypes.SELECT,
-//                     raw: true,
-//                     replacements: { id: id },
-//                 }
-//             );
-//             console.log(rangedArchivedFoodLogs.length, "---rangedArchivedFoodLogs---343");
-//             // data from archived food logs
-//             rangedArchivedFoodLogs.forEach((log: any) => {
-//                 if (log.food_groups) {
-//                     let consecKey: string[] = [];
-//                     Object.keys(log.food_groups).forEach((key: string) => {
-//                         const groupCount = log.food_groups[key]
-//                         if (key.toLowerCase().includes('bns')) {
-//                             consecKey.push('bns');
-//                             foodGroupCounts.beansNutsSeeds += groupCount;
-//                         } else if (key.toLowerCase().includes('fruit')) {
-//                             consecKey.push('f');
-//                             foodGroupCounts.fruit += groupCount;
-//                         } else if (key.toLowerCase().includes('vegetable')) {
-//                             consecKey.push('v');
-//                             foodGroupCounts.vegetable += groupCount;
-//                         } else if (key.toLowerCase().includes('grain')) {
-//                             consecKey.push('g');
-//                             foodGroupCounts.grain += groupCount;
-//                         } else if (key.toLowerCase().includes('dairy')) {
-//                             consecKey.push('d');
-//                             foodGroupCounts.dairy += groupCount;
-//                         } else if (key.toLowerCase().includes('protein')) {
-//                             consecKey.push('p');
-//                             foodGroupCounts.protein += groupCount;
-//                         } else {
-//                             consecKey.push('w');
-//                             foodGroupCounts.wildcard += groupCount;
-//                         }
-//                     })
-
-//                     // calculate consecutive logs
-//                     const foodGroupsOrder = ['f', 'v', 'g', 'd', 'p', 'bns'];
-//                     const uniqueFoodGroups = [...new Set(consecKey)];
-//                     const hasAllGroups = foodGroupsOrder.every(g => uniqueFoodGroups.includes(g));
-//                     if (hasAllGroups) {
-//                         consecutive++;
-//                     }
-//                 }
-//             });
-//             console.log(consecutive, "---conseutive---384");
-//             // Calculate days between first and last log (inclusive)
-//             const timeDiff = new Date(endDate).getTime() - new Date(startDate).getTime();
-//             let totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates
-
-//             const avgFoodLogsPerDay = {
-//                 fruit: foodGroupCounts.fruit > 0 ? (foodGroupCounts.fruit / totalDays).toFixed(1) : 0,
-//                 vegetable: foodGroupCounts.vegetable > 0 ? (foodGroupCounts.vegetable / totalDays).toFixed(1) : 0,
-//                 grain: foodGroupCounts.grain > 0 ? (foodGroupCounts.grain / totalDays).toFixed(1) : 0,
-//                 dairy: foodGroupCounts.dairy > 0 ? (foodGroupCounts.dairy / totalDays).toFixed(1) : 0,
-//                 protein: foodGroupCounts.protein > 0 ? (foodGroupCounts.protein / totalDays).toFixed(1) : 0,
-//                 beansNutsSeeds: foodGroupCounts.beansNutsSeeds > 0 ? (foodGroupCounts.beansNutsSeeds / totalDays).toFixed(1) : 0,
-//                 wildcard: foodGroupCounts.wildcard > 0 ? (foodGroupCounts.wildcard / totalDays).toFixed(1) : 0
-//             };
-
-//             let executeFoodLogsCountQuery = `SELECT COUNT(FL.id) as "count" FROM public.food_logs AS FL
-//                 WHERE FL."userId" = :id and FL."created_at" >= :startDate and FL."created_at" <= :endDate`;
-//             const foodLogsCount: any = await this.userModel?.sequelize?.query(
-//                 executeFoodLogsCountQuery,
-//                 {
-//                     type: QueryTypes.SELECT,
-//                     raw: true,
-//                     replacements: { id: id, startDate: startDate, endDate: endDate },
-//                 }
-//             );
-
-//             const avgFoodLogCountPerDay = Object.values(foodGroupCounts).reduce((acc: number, curr: number) => {
-//                 return (acc + curr);
-//             });
-
-//             let dataToDisplay = false;
-//             if (parseInt(foodLogsCount[0]?.count) > 0) {
-//                 dataToDisplay = true;
-//             } else if (parseInt(rangedArchivedFoodLogs.length) > 0) {
-//                 dataToDisplay = true;
-//             } else {
-//                 Object.values(foodGroupCounts).forEach((count: number) => {
-//                     if (parseInt(count.toString()) > 0) {
-//                         dataToDisplay = true;
-//                     }
-//                 });
-//             }
-            
-//             const result = {
-//                 // foodLogs: { rows: foodLogs, count: foodLogsCount[0]?.count || 0 },
-//                 foodLogsArchived: allArchivedFoodLogs,
-//                 foodGroupDistribution: foodGroupCounts,
-//                 averageLogsPerDay: avgFoodLogsPerDay,
-//                 totalDays: totalDays,
-//                 consecutiveLogs: consecutive,
-//                 count: foodLogsCount[0]?.count || 0,
-//                 dataToDisplay: dataToDisplay,
-//                 avgFoodLogCountPerDay: (avgFoodLogCountPerDay/totalDays).toFixed(1)
-//             }
-
-//             return { success: true, data: result, message: 'User food logs fetched successfully' };
-//         } catch (error) {
-//             console.error(error, "---error---");
-//             throw new BadRequestException(error.message);
-//         }
-//     }
-
-
-async fetchUserFoodLogs(payload: FoodLogsFilterDto): Promise<any> {
-    try {
-        const { id, startDate, endDate } = payload;
-
-        let executeFoodLogsQuery = `SELECT DATE(FL."created_at") AS log_date, jsonb_agg(to_jsonb(FL."food_groups")) AS "foodLogs",
-            jsonb_agg(to_jsonb(AIFR)) AS "aiFoodRecognition" FROM public.food_logs AS FL
-            LEFT JOIN public.ai_food_recognition AS AIFR ON FL."ai_food_data_id" = AIFR.id
-            WHERE FL."userId" = :id AND FL."created_at" >= :startDate AND FL."created_at" <= :endDate
-            GROUP BY DATE(FL."created_at") ORDER BY log_date ASC;`;
-
-        const foodLogs: any = await this.userModel?.sequelize?.query(
-            executeFoodLogsQuery,
-            {
-                type: QueryTypes.SELECT,
-                raw: true,
-                replacements: {
-                    id: id,
-                    startDate: startDate,
-                    endDate: endDate
-                },
-            }
-        );
-        // Calculate real food group distribution
-        const foodGroupCounts = {
-            fruit: 0,
-            vegetable: 0,
-            grain: 0,
-            dairy: 0,
-            protein: 0,
-            beansNutsSeeds: 0,
-            wildcard: 0
-        }
-
-        let executeRangedArchivedFoodLogsQuery = `SELECT * FROM public.food_group_archives AS FGA
-            WHERE FGA."userId" = :id and Date(FGA."start_date") >= :startDate and Date(FGA."end_date") <= :endDate`;
-
-        const rangedArchivedFoodLogs: any = await this.userModel?.sequelize?.query(
-            executeRangedArchivedFoodLogsQuery,
-            {
-                type: QueryTypes.SELECT,
-                raw: true,
-                replacements: { id: id, startDate: startDate, endDate: endDate },
-            }
-        );
-
-        let consecutive = 0;
-        // data from food logs
-        foodLogs.forEach((log: any) => {
-            if (log.foodLogs && log.foodLogs.length > 0) {
-                const oneGroup = log.foodLogs.flat();
-                let grp = oneGroup.map((group: string) => group.toLowerCase());
-                grp.forEach((g: string) => {
-                    if (g === 'f') foodGroupCounts.fruit++
-                    else if (g === 'v') foodGroupCounts.vegetable++
-                    else if (g === 'g') foodGroupCounts.grain++
-                    else if (g === 'd') foodGroupCounts.dairy++
-                    else if (g === 'p') foodGroupCounts.protein++
-                    else if (g === 'bns') foodGroupCounts.beansNutsSeeds++
-                    else foodGroupCounts.wildcard++;
-                })
-
-                // calculate consecutive logs
-                const foodGroupsOrder = ['f', 'v', 'g', 'd', 'p', 'bns'];
-                const uniqueFoodGroups = [...new Set(grp)];
-                const hasAllGroups = foodGroupsOrder.every(g => uniqueFoodGroups.includes(g));
-                if (hasAllGroups) {
-                    consecutive++;
+            const foodLogs: any = await this.userModel?.sequelize?.query(
+                executeFoodLogsQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: {
+                        id: id,
+                        startDate: startDate,
+                        endDate: endDate
+                    },
                 }
+            );
+            // Calculate real food group distribution
+            const foodGroupCounts = {
+                fruit: 0,
+                vegetable: 0,
+                grain: 0,
+                dairy: 0,
+                protein: 0,
+                beansNutsSeeds: 0,
+                wildcard: 0
             }
-        });
 
-        let executeAllArchivedFoodLogsQuery = `SELECT * FROM public.food_group_archives AS FGA
-            WHERE FGA."userId" = :id`;
-        const allArchivedFoodLogs: any = await this.userModel?.sequelize?.query(
-            executeAllArchivedFoodLogsQuery,
-            {
-                type: QueryTypes.SELECT,
-                raw: true,
-                replacements: { id: id },
-            }
-        );
-        // data from archived food logs
-        rangedArchivedFoodLogs.forEach((log: any) => {
-            if (log.food_groups) {
-                let consecKey: string[] = [];
-                Object.keys(log.food_groups).forEach((key: string) => {
-                    const groupCount = log.food_groups[key]
-                    if (key.toLowerCase().includes('bns')) {
-                        consecKey.push('bns');
-                        foodGroupCounts.beansNutsSeeds += groupCount;
-                    } else if (key.toLowerCase().includes('fruit')) {
-                        consecKey.push('f');
-                        foodGroupCounts.fruit += groupCount;
-                    } else if (key.toLowerCase().includes('vegetable')) {
-                        consecKey.push('v');
-                        foodGroupCounts.vegetable += groupCount;
-                    } else if (key.toLowerCase().includes('grain')) {
-                        consecKey.push('g');
-                        foodGroupCounts.grain += groupCount;
-                    } else if (key.toLowerCase().includes('dairy')) {
-                        consecKey.push('d');
-                        foodGroupCounts.dairy += groupCount;
-                    } else if (key.toLowerCase().includes('protein')) {
-                        consecKey.push('p');
-                        foodGroupCounts.protein += groupCount;
-                    } else {
-                        consecKey.push('w');
-                        foodGroupCounts.wildcard += groupCount;
+            let executeRangedArchivedFoodLogsQuery = `SELECT * FROM public.food_group_archives AS FGA
+                WHERE FGA."userId" = :id and Date(FGA."start_date") >= :startDate and Date(FGA."end_date") <= :endDate`;
+
+            const rangedArchivedFoodLogs: any = await this.userModel?.sequelize?.query(
+                executeRangedArchivedFoodLogsQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id, startDate: startDate, endDate: endDate },
+                }
+            );
+
+            let consecutive = 0;
+            // data from food logs
+            foodLogs.forEach((log: any) => {
+                if (log.foodLogs && log.foodLogs.length > 0) {
+                    const oneGroup = log.foodLogs.flat();
+                    let grp = oneGroup.map((group: string) => group.toLowerCase());
+                    grp.forEach((g: string) => {
+                        if (g === 'f') foodGroupCounts.fruit++
+                        else if (g === 'v') foodGroupCounts.vegetable++
+                        else if (g === 'g') foodGroupCounts.grain++
+                        else if (g === 'd') foodGroupCounts.dairy++
+                        else if (g === 'p') foodGroupCounts.protein++
+                        else if (g === 'bns') foodGroupCounts.beansNutsSeeds++
+                        else foodGroupCounts.wildcard++;
+                    })
+
+                    // calculate consecutive logs
+                    const foodGroupsOrder = ['f', 'v', 'g', 'd', 'p', 'bns'];
+                    const uniqueFoodGroups = [...new Set(grp)];
+                    const hasAllGroups = foodGroupsOrder.every(g => uniqueFoodGroups.includes(g));
+                    if (hasAllGroups) {
+                        consecutive++;
                     }
-                })
-                // calculate consecutive logs
-                const foodGroupsOrder = ['f', 'v', 'g', 'd', 'p', 'bns'];
-                const uniqueFoodGroups = [...new Set(consecKey)];
-                const hasAllGroups = foodGroupsOrder.every(g => uniqueFoodGroups.includes(g));
-                if (hasAllGroups) {
-                    consecutive++;
-                }
-            }
-        });
-
-        // Calculate days between first and last log (inclusive)
-        const timeDiff = new Date(endDate).getTime() - new Date(startDate).getTime();
-        let totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates
-
-        const avgFoodLogsPerDay = {
-            fruit: foodGroupCounts.fruit > 0 ? (foodGroupCounts.fruit / totalDays).toFixed(1) : 0,
-            vegetable: foodGroupCounts.vegetable > 0 ? (foodGroupCounts.vegetable / totalDays).toFixed(1) : 0,
-            grain: foodGroupCounts.grain > 0 ? (foodGroupCounts.grain / totalDays).toFixed(1) : 0,
-            dairy: foodGroupCounts.dairy > 0 ? (foodGroupCounts.dairy / totalDays).toFixed(1) : 0,
-            protein: foodGroupCounts.protein > 0 ? (foodGroupCounts.protein / totalDays).toFixed(1) : 0,
-            beansNutsSeeds: foodGroupCounts.beansNutsSeeds > 0 ? (foodGroupCounts.beansNutsSeeds / totalDays).toFixed(1) : 0,
-            wildcard: foodGroupCounts.wildcard > 0 ? (foodGroupCounts.wildcard / totalDays).toFixed(1) : 0
-        };
-
-        let executeFoodLogsCountQuery = `SELECT COUNT(FL.id) as "count" FROM public.food_logs AS FL
-            WHERE FL."userId" = :id and FL."created_at" >= :startDate and FL."created_at" <= :endDate`;
-        const foodLogsCount: any = await this.userModel?.sequelize?.query(
-            executeFoodLogsCountQuery,
-            {
-                type: QueryTypes.SELECT,
-                raw: true,
-                replacements: { id: id, startDate: startDate, endDate: endDate },
-            }
-        );
-
-        const avgFoodLogCountPerDay = Object.values(foodGroupCounts).reduce((acc: number, curr: number) => {
-            return (acc + curr);
-        });
-
-        let dataToDisplay = false;
-        if (parseInt(foodLogsCount[0]?.count) > 0) {
-            dataToDisplay = true;
-        } else if (parseInt(rangedArchivedFoodLogs.length) > 0) {
-            dataToDisplay = true;
-        } else {
-            Object.values(foodGroupCounts).forEach((count: number) => {
-                if (parseInt(count.toString()) > 0) {
-                    dataToDisplay = true;
                 }
             });
-        }
-        
-        const result = {
-            // foodLogs: { rows: foodLogs, count: foodLogsCount[0]?.count || 0 },
-            foodLogsArchived: allArchivedFoodLogs,
-            foodGroupDistribution: foodGroupCounts,
-            averageLogsPerDay: avgFoodLogsPerDay,
-            totalDays: totalDays,
-            consecutiveLogs: consecutive,
-            count: foodLogsCount[0]?.count || 0,
-            dataToDisplay: dataToDisplay,
-            avgFoodLogCountPerDay: (avgFoodLogCountPerDay/totalDays).toFixed(1)
-        }
 
-        return { success: true, data: result, message: 'User food logs fetched successfully' };
-    } catch (error) {
-        console.error(error, "---error---");
-        throw new BadRequestException(error.message);
+            let executeAllArchivedFoodLogsQuery = `SELECT * FROM public.food_group_archives AS FGA
+            WHERE FGA."userId" = :id`;
+            const allArchivedFoodLogs: any = await this.userModel?.sequelize?.query(
+                executeAllArchivedFoodLogsQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id },
+                }
+            );
+            // data from archived food logs
+            rangedArchivedFoodLogs.forEach((log: any) => {
+                if (log.food_groups) {
+                    let consecKey: string[] = [];
+                    Object.keys(log.food_groups).forEach((key: string) => {
+                        const groupCount = log.food_groups[key]
+                        if (key.toLowerCase().includes('bns')) {
+                            consecKey.push('bns');
+                            foodGroupCounts.beansNutsSeeds += groupCount;
+                        } else if (key.toLowerCase().includes('fruit')) {
+                            consecKey.push('f');
+                            foodGroupCounts.fruit += groupCount;
+                        } else if (key.toLowerCase().includes('vegetable')) {
+                            consecKey.push('v');
+                            foodGroupCounts.vegetable += groupCount;
+                        } else if (key.toLowerCase().includes('grain')) {
+                            consecKey.push('g');
+                            foodGroupCounts.grain += groupCount;
+                        } else if (key.toLowerCase().includes('dairy')) {
+                            consecKey.push('d');
+                            foodGroupCounts.dairy += groupCount;
+                        } else if (key.toLowerCase().includes('protein')) {
+                            consecKey.push('p');
+                            foodGroupCounts.protein += groupCount;
+                        } else {
+                            consecKey.push('w');
+                            foodGroupCounts.wildcard += groupCount;
+                        }
+                    })
+                    // calculate consecutive logs
+                    const foodGroupsOrder = ['f', 'v', 'g', 'd', 'p', 'bns'];
+                    const uniqueFoodGroups = [...new Set(consecKey)];
+                    const hasAllGroups = foodGroupsOrder.every(g => uniqueFoodGroups.includes(g));
+                    if (hasAllGroups) {
+                        consecutive++;
+                    }
+                }
+            });
+
+            // Calculate days between first and last log (inclusive)
+            const timeDiff = new Date(endDate).getTime() - new Date(startDate).getTime();
+            let totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates
+
+            const avgFoodLogsPerDay = {
+                fruit: foodGroupCounts.fruit > 0 ? (foodGroupCounts.fruit / totalDays).toFixed(1) : 0,
+                vegetable: foodGroupCounts.vegetable > 0 ? (foodGroupCounts.vegetable / totalDays).toFixed(1) : 0,
+                grain: foodGroupCounts.grain > 0 ? (foodGroupCounts.grain / totalDays).toFixed(1) : 0,
+                dairy: foodGroupCounts.dairy > 0 ? (foodGroupCounts.dairy / totalDays).toFixed(1) : 0,
+                protein: foodGroupCounts.protein > 0 ? (foodGroupCounts.protein / totalDays).toFixed(1) : 0,
+                beansNutsSeeds: foodGroupCounts.beansNutsSeeds > 0 ? (foodGroupCounts.beansNutsSeeds / totalDays).toFixed(1) : 0,
+                wildcard: foodGroupCounts.wildcard > 0 ? (foodGroupCounts.wildcard / totalDays).toFixed(1) : 0
+            };
+
+            let executeFoodLogsCountQuery = `SELECT COUNT(FL.id) as "count" FROM public.food_logs AS FL
+            WHERE FL."userId" = :id and FL."created_at" >= :startDate and FL."created_at" <= :endDate`;
+            const foodLogsCount: any = await this.userModel?.sequelize?.query(
+                executeFoodLogsCountQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id, startDate: startDate, endDate: endDate },
+                }
+            );
+
+            const avgFoodLogCountPerDay = Object.values(foodGroupCounts).reduce((acc: number, curr: number) => {
+                return (acc + curr);
+            });
+
+            let dataToDisplay = false;
+            if (parseInt(foodLogsCount[0]?.count) > 0) {
+                dataToDisplay = true;
+            } else if (parseInt(rangedArchivedFoodLogs.length) > 0) {
+                dataToDisplay = true;
+            } else {
+                Object.values(foodGroupCounts).forEach((count: number) => {
+                    if (parseInt(count.toString()) > 0) {
+                        dataToDisplay = true;
+                    }
+                });
+            }
+
+            const result = {
+                // foodLogs: { rows: foodLogs, count: foodLogsCount[0]?.count || 0 },
+                foodLogsArchived: allArchivedFoodLogs,
+                foodGroupDistribution: foodGroupCounts,
+                averageLogsPerDay: avgFoodLogsPerDay,
+                totalDays: totalDays,
+                consecutiveLogs: consecutive,
+                count: foodLogsCount[0]?.count || 0,
+                dataToDisplay: dataToDisplay,
+                avgFoodLogCountPerDay: (avgFoodLogCountPerDay / totalDays).toFixed(1)
+            }
+
+            return { success: true, data: result, message: 'User food logs fetched successfully' };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
     }
-}
 
     async fetchUserReviews(id: string, pageNumber: number, pageSize: number): Promise<any> {
         try {

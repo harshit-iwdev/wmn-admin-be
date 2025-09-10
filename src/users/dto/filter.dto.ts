@@ -9,6 +9,9 @@ export class FilterDto {
     sortBy: string;
     sortOrder: string;
     selectedRole: string;
+    trial: string;
+    gift: string;
+    unsubscribed: string;
 }
 
 export class FoodLogsFilterDto {

@@ -19,7 +19,7 @@ export class UsersService {
 
     async findAllUsersList(pageNumber: number, pageSize: number, filters: FilterDto): Promise<IResponse> {
         try {
-            const { searchTerm, sortBy, sortOrder, selectedRole } = filters;
+            const { searchTerm, sortBy, sortOrder, selectedRole, trial, gift, unsubscribed } = filters;
 
             let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as userMetadata,
                 COALESCE(followers.follower_count, 0) AS "followerCount",
@@ -38,6 +38,30 @@ export class UsersService {
             if (searchTerm) {
                 executeDataQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
                 executeCountQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
+            }
+
+            if (trial && trial.toString() === 'true') {
+                executeDataQuery += ` AND M.trial = true`;
+                executeCountQuery += ` AND M.trial = true`;
+            } else if (trial && trial.toString() === 'false') {
+                executeDataQuery += ` AND M.trial = false`;
+                executeCountQuery += ` AND M.trial = false`;
+            }
+
+            if (gift && gift.toString() === 'true') {
+                executeDataQuery += ` AND M.gift = true`;
+                executeCountQuery += ` AND M.gift = true`;
+            } else if (gift && gift.toString() === 'false') {
+                executeDataQuery += ` AND M.gift = false`;
+                executeCountQuery += ` AND M.gift = false`;
+            }
+
+            if (unsubscribed && unsubscribed.toString() === 'true') {
+                executeDataQuery += ` AND M.unsubscribed = true`;
+                executeCountQuery += ` AND M.unsubscribed = true`;
+            } else if (unsubscribed && unsubscribed.toString() === 'false') {
+                executeDataQuery += ` AND M.unsubscribed = false`;
+                executeCountQuery += ` AND M.unsubscribed = false`;
             }
 
             if (selectedRole === 'practitioner') {
@@ -230,6 +254,69 @@ export class UsersService {
                     },
                 }
             );
+
+            let executeAiFoodLogsQuery = `SELECT * FROM public.ai_food_recognition 
+            WHERE "userId" = :id AND "createdAt" >= :startDate AND "createdAt" <= :endDate`;
+
+            const aiFoodLogs: any = await this.userModel?.sequelize?.query(
+                executeAiFoodLogsQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: {
+                        id: id,
+                        startDate: startDate,
+                        endDate: endDate
+                    },
+                }
+            );
+
+            let aiConfirmedFoodGroups = {
+                fruit: { count: 0, description: [] as string[] },
+                vegetable: { count: 0, description: [] as string[] },
+                grain: { count: 0, description: [] as string[] },
+                dairy: { count: 0, description: [] as string[] },
+                protein: { count: 0, description: [] as string[] },
+                beansNutsSeeds: { count: 0, description: [] as string[] },
+                wildcard: { count: 0, description: [] as string[] }
+            };
+
+            const getFlattenedDescription = (description: string, descriptionArray: string[]) => {
+                description.split(',').forEach((item: string) => {
+                    if (item.length > 0) { descriptionArray.push(item.trim()) }
+                });
+                return descriptionArray;
+            }
+
+            aiFoodLogs.forEach((log: any) => {
+                if (log.foodAiData.length > 0) {
+                    log.foodAiData.forEach((item: any) => {
+                        if (item.foodGroup === 'fruit') {
+                            aiConfirmedFoodGroups.fruit.count++;
+                            aiConfirmedFoodGroups.fruit.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.fruit.description)
+                        } else if (item.foodGroup === 'vegetable') {
+                            aiConfirmedFoodGroups.vegetable.count++;
+                            aiConfirmedFoodGroups.vegetable.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.vegetable.description)
+                        } else if (item.foodGroup === 'grain') {
+                            aiConfirmedFoodGroups.grain.count++;
+                            aiConfirmedFoodGroups.grain.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.grain.description)
+                        } else if (item.foodGroup === 'dairy') {
+                            aiConfirmedFoodGroups.dairy.count++;
+                            aiConfirmedFoodGroups.dairy.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.dairy.description)
+                        } else if (item.foodGroup === 'protein') {
+                            aiConfirmedFoodGroups.protein.count++;
+                            aiConfirmedFoodGroups.protein.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.protein.description)
+                        } else if (item.foodGroup === 'beansNutsSeeds') {
+                            aiConfirmedFoodGroups.beansNutsSeeds.count++;
+                            aiConfirmedFoodGroups.beansNutsSeeds.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.beansNutsSeeds.description)
+                        } else if (item.foodGroup === 'wildCard') {
+                            aiConfirmedFoodGroups.wildcard.count++;
+                            aiConfirmedFoodGroups.wildcard.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.wildcard.description)
+                        }
+                    })
+                }
+            })
+
             // Calculate real food group distribution
             const foodGroupCounts = {
                 fruit: 0,
@@ -379,7 +466,8 @@ export class UsersService {
                 consecutiveLogs: consecutive,
                 count: foodLogsCount[0]?.count || 0,
                 dataToDisplay: dataToDisplay,
-                avgFoodLogCountPerDay: (avgFoodLogCountPerDay / totalDays).toFixed(1)
+                avgFoodLogCountPerDay: (avgFoodLogCountPerDay / totalDays).toFixed(1),
+                aiConfirmedFoodGroups: aiConfirmedFoodGroups
             }
 
             return { success: true, data: result, message: 'User food logs fetched successfully' };
@@ -392,10 +480,6 @@ export class UsersService {
     async fetchUserFoodLogJournal(id: string, pageNumber: number, pageSize: number): Promise<any> {
         try {
             const offset = (pageNumber - 1) * pageSize;
-            // let executeFoodLogJournalQuery = `SELECT FL."hunger", FL."consumed", FL."userId", FL."fullness", FL."extra1", FL."extra2", FL."food_type", FL."created_at",
-            //     R."whatWentWell", R."whatCouldBeBetter", R."correctiveMeasures", R."thoughts"
-            //     FROM public.reviews as R JOIN public.food_logs as FL ON FL.id = R."foodLogId" 
-            //     WHERE R."user_id" = :id ORDER BY R."created_at" DESC LIMIT :pageSize OFFSET :offset`;
 
             const executeFoodLogJournalQuery = `SELECT FL."hunger", FL."consumed", FL."userId", FL."fullness", FL."extra1", FL."extra2", FL."food_type", FL."created_at" AS food_log_created_at,
                 R."whatWentWell", R."whatCouldBeBetter", R."correctiveMeasures", R."thoughts", R."created_at" AS review_created_at

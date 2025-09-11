@@ -232,14 +232,71 @@ export class UsersService {
         }
     }
 
+    async formatDateLocal(date: Date | string) {
+        if (typeof date === 'string') {
+          date = new Date(date);
+        }
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
     async fetchUserFoodLogs(payload: FoodLogsFilterDto): Promise<any> {
         try {
-            const { id, startDate, endDate } = payload;
+            let { id, startDate, endDate } = payload;
+            let lastArchiveEndDate: any = '';
+            const lastArchiveDate: any = await this.userModel?.sequelize?.query(
+                `SELECT "end_date" as "endDate" FROM public.food_group_archives
+                    WHERE "userId" = :id ORDER BY "end_date" DESC LIMIT 1`,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id },
+                }
+            );
+            if (lastArchiveDate[0]?.endDate) {
+                let tempEndDate = lastArchiveDate[0]?.endDate;
+                tempEndDate = new Date(tempEndDate);
+                tempEndDate.setDate(tempEndDate.getDate() + 1);
+                tempEndDate = tempEndDate.toISOString();
+                tempEndDate = await this.formatDateLocal(tempEndDate);
+                lastArchiveEndDate = tempEndDate;
+            } else {    
+                const userCreationDate: any = await this.userModel?.sequelize?.query(
+                    `SELECT "created_at" as "createdAt" FROM auth.users WHERE "id" = :id`,
+                    {
+                        type: QueryTypes.SELECT,
+                        raw: true,
+                        replacements: { id: id },
+                    }
+                );
+                lastArchiveEndDate = userCreationDate[0]?.createdAt;
+            }
+            if (startDate.length === 0 && endDate.length === 0) {
+                startDate = await this.formatDateLocal(lastArchiveEndDate);
+                endDate = await this.formatDateLocal(new Date());
+            }
+
+            let executeReviewFoodLogsQuery = `Select R."user_id", RFL."food_log_id" from public.reviews as R
+join public."review_food_logs" as RFL on RFL."review_id" = R."id"
+where R."user_id" = 'a289c800-8f81-4274-9165-2a0b697de738' and Date(R."created_at") >= '2025-07-19' and Date(R."created_at") <= '2025-09-11';`;
+
+const reviewFoodLogs: any = await this.userModel?.sequelize?.query(
+    executeReviewFoodLogsQuery,
+    {
+        type: QueryTypes.SELECT,
+        raw: true,
+        replacements: { id: id, startDate: startDate, endDate: endDate },
+    }
+);
+
+const foodLogsIdsArr = reviewFoodLogs.map((review: any) => review.food_log_id);
 
             let executeFoodLogsQuery = `SELECT DATE(FL."created_at") AS log_date, jsonb_agg(to_jsonb(FL."food_groups")) AS "foodLogs",
                 jsonb_agg(to_jsonb(AIFR)) AS "aiFoodRecognition" FROM public.food_logs AS FL
                 LEFT JOIN public.ai_food_recognition AS AIFR ON FL."ai_food_data_id" = AIFR.id
-                WHERE FL."userId" = :id AND FL."created_at" >= :startDate AND FL."created_at" <= :endDate
+                WHERE FL."userId" = :id AND FL."id" IN (:foodLogsIdsArr)
                 GROUP BY DATE(FL."created_at") ORDER BY log_date ASC;`;
 
             const foodLogs: any = await this.userModel?.sequelize?.query(
@@ -250,7 +307,8 @@ export class UsersService {
                     replacements: {
                         id: id,
                         startDate: startDate,
-                        endDate: endDate
+                        endDate: endDate,
+                        foodLogsIdsArr: foodLogsIdsArr
                     },
                 }
             );
@@ -285,6 +343,7 @@ export class UsersService {
                 description.split(',').forEach((item: string) => {
                     if (item.length > 0) { descriptionArray.push(item.trim()) }
                 });
+                descriptionArray = Array.from(new Set(descriptionArray));
                 return descriptionArray;
             }
 
@@ -328,18 +387,6 @@ export class UsersService {
                 wildcard: 0
             }
 
-            let executeRangedArchivedFoodLogsQuery = `SELECT * FROM public.food_group_archives AS FGA
-                WHERE FGA."userId" = :id and Date(FGA."start_date") >= :startDate and Date(FGA."end_date") <= :endDate`;
-
-            const rangedArchivedFoodLogs: any = await this.userModel?.sequelize?.query(
-                executeRangedArchivedFoodLogsQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                    replacements: { id: id, startDate: startDate, endDate: endDate },
-                }
-            );
-
             let consecutive = 0;
             // data from food logs
             foodLogs.forEach((log: any) => {
@@ -367,7 +414,7 @@ export class UsersService {
             });
 
             let executeAllArchivedFoodLogsQuery = `SELECT * FROM public.food_group_archives AS FGA
-            WHERE FGA."userId" = :id`;
+            WHERE FGA."userId" = :id ORDER BY FGA."created_at" DESC`;
             const allArchivedFoodLogs: any = await this.userModel?.sequelize?.query(
                 executeAllArchivedFoodLogsQuery,
                 {
@@ -376,44 +423,6 @@ export class UsersService {
                     replacements: { id: id },
                 }
             );
-            // data from archived food logs
-            rangedArchivedFoodLogs.forEach((log: any) => {
-                if (log.food_groups) {
-                    let consecKey: string[] = [];
-                    Object.keys(log.food_groups).forEach((key: string) => {
-                        const groupCount = log.food_groups[key]
-                        if (key.toLowerCase().includes('bns')) {
-                            consecKey.push('bns');
-                            foodGroupCounts.beansNutsSeeds += groupCount;
-                        } else if (key.toLowerCase().includes('fruit')) {
-                            consecKey.push('f');
-                            foodGroupCounts.fruit += groupCount;
-                        } else if (key.toLowerCase().includes('vegetable')) {
-                            consecKey.push('v');
-                            foodGroupCounts.vegetable += groupCount;
-                        } else if (key.toLowerCase().includes('grain')) {
-                            consecKey.push('g');
-                            foodGroupCounts.grain += groupCount;
-                        } else if (key.toLowerCase().includes('dairy')) {
-                            consecKey.push('d');
-                            foodGroupCounts.dairy += groupCount;
-                        } else if (key.toLowerCase().includes('protein')) {
-                            consecKey.push('p');
-                            foodGroupCounts.protein += groupCount;
-                        } else {
-                            consecKey.push('w');
-                            foodGroupCounts.wildcard += groupCount;
-                        }
-                    })
-                    // calculate consecutive logs
-                    const foodGroupsOrder = ['f', 'v', 'g', 'd', 'p', 'bns'];
-                    const uniqueFoodGroups = [...new Set(consecKey)];
-                    const hasAllGroups = foodGroupsOrder.every(g => uniqueFoodGroups.includes(g));
-                    if (hasAllGroups) {
-                        consecutive++;
-                    }
-                }
-            });
 
             // Calculate days between first and last log (inclusive)
             const timeDiff = new Date(endDate).getTime() - new Date(startDate).getTime();
@@ -447,8 +456,6 @@ export class UsersService {
             let dataToDisplay = false;
             if (parseInt(foodLogsCount[0]?.count) > 0) {
                 dataToDisplay = true;
-            } else if (parseInt(rangedArchivedFoodLogs.length) > 0) {
-                dataToDisplay = true;
             } else {
                 Object.values(foodGroupCounts).forEach((count: number) => {
                     if (parseInt(count.toString()) > 0) {
@@ -458,7 +465,6 @@ export class UsersService {
             }
 
             const result = {
-                // foodLogs: { rows: foodLogs, count: foodLogsCount[0]?.count || 0 },
                 foodLogsArchived: allArchivedFoodLogs,
                 foodGroupDistribution: foodGroupCounts,
                 averageLogsPerDay: avgFoodLogsPerDay,
@@ -467,7 +473,8 @@ export class UsersService {
                 count: foodLogsCount[0]?.count || 0,
                 dataToDisplay: dataToDisplay,
                 avgFoodLogCountPerDay: (avgFoodLogCountPerDay / totalDays).toFixed(1),
-                aiConfirmedFoodGroups: aiConfirmedFoodGroups
+                aiConfirmedFoodGroups: aiConfirmedFoodGroups,
+                lastArchiveEndDate: lastArchiveEndDate
             }
 
             return { success: true, data: result, message: 'User food logs fetched successfully' };

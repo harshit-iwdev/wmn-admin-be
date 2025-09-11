@@ -279,19 +279,18 @@ export class UsersService {
             }
 
             let executeReviewFoodLogsQuery = `Select R."user_id", RFL."food_log_id" from public.reviews as R
-join public."review_food_logs" as RFL on RFL."review_id" = R."id"
-where R."user_id" = 'a289c800-8f81-4274-9165-2a0b697de738' and Date(R."created_at") >= '2025-07-19' and Date(R."created_at") <= '2025-09-11';`;
-
-const reviewFoodLogs: any = await this.userModel?.sequelize?.query(
-    executeReviewFoodLogsQuery,
-    {
-        type: QueryTypes.SELECT,
-        raw: true,
-        replacements: { id: id, startDate: startDate, endDate: endDate },
-    }
-);
-
-const foodLogsIdsArr = reviewFoodLogs.map((review: any) => review.food_log_id);
+                join public."review_food_logs" as RFL on RFL."review_id" = R."id"
+                where R."user_id" = :id and Date(R."created_at") >= :startDate and Date(R."created_at") <= :endDate`;
+                
+            const reviewFoodLogs: any = await this.userModel?.sequelize?.query(
+                executeReviewFoodLogsQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id, startDate: startDate, endDate: endDate },
+                }
+            );
+            const foodLogsIdsArr = reviewFoodLogs.map((review: any) => review.food_log_id);
 
             let executeFoodLogsQuery = `SELECT DATE(FL."created_at") AS log_date, jsonb_agg(to_jsonb(FL."food_groups")) AS "foodLogs",
                 jsonb_agg(to_jsonb(AIFR)) AS "aiFoodRecognition" FROM public.food_logs AS FL
@@ -426,7 +425,8 @@ const foodLogsIdsArr = reviewFoodLogs.map((review: any) => review.food_log_id);
 
             // Calculate days between first and last log (inclusive)
             const timeDiff = new Date(endDate).getTime() - new Date(startDate).getTime();
-            let totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates
+            const totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates
+            const totalReviewDays = reviewFoodLogs.length;
 
             const avgFoodLogsPerDay = {
                 fruit: foodGroupCounts.fruit > 0 ? (foodGroupCounts.fruit / totalDays).toFixed(1) : 0,
@@ -469,6 +469,7 @@ const foodLogsIdsArr = reviewFoodLogs.map((review: any) => review.food_log_id);
                 foodGroupDistribution: foodGroupCounts,
                 averageLogsPerDay: avgFoodLogsPerDay,
                 totalDays: totalDays,
+                totalReviewDays: totalReviewDays,
                 consecutiveLogs: consecutive,
                 count: foodLogsCount[0]?.count || 0,
                 dataToDisplay: dataToDisplay,

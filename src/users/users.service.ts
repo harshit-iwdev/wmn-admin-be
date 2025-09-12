@@ -429,13 +429,13 @@ export class UsersService {
             const totalReviewDays = reviewFoodLogs.length;
 
             const avgFoodLogsPerDay = {
-                fruit: foodGroupCounts.fruit > 0 ? (foodGroupCounts.fruit / totalDays).toFixed(1) : 0,
-                vegetable: foodGroupCounts.vegetable > 0 ? (foodGroupCounts.vegetable / totalDays).toFixed(1) : 0,
-                grain: foodGroupCounts.grain > 0 ? (foodGroupCounts.grain / totalDays).toFixed(1) : 0,
-                dairy: foodGroupCounts.dairy > 0 ? (foodGroupCounts.dairy / totalDays).toFixed(1) : 0,
-                protein: foodGroupCounts.protein > 0 ? (foodGroupCounts.protein / totalDays).toFixed(1) : 0,
-                beansNutsSeeds: foodGroupCounts.beansNutsSeeds > 0 ? (foodGroupCounts.beansNutsSeeds / totalDays).toFixed(1) : 0,
-                wildcard: foodGroupCounts.wildcard > 0 ? (foodGroupCounts.wildcard / totalDays).toFixed(1) : 0
+                fruit: foodGroupCounts.fruit > 0 ? (foodGroupCounts.fruit / totalReviewDays).toFixed(1) : 0,
+                vegetable: foodGroupCounts.vegetable > 0 ? (foodGroupCounts.vegetable / totalReviewDays).toFixed(1) : 0,
+                grain: foodGroupCounts.grain > 0 ? (foodGroupCounts.grain / totalReviewDays).toFixed(1) : 0,
+                dairy: foodGroupCounts.dairy > 0 ? (foodGroupCounts.dairy / totalReviewDays).toFixed(1) : 0,
+                protein: foodGroupCounts.protein > 0 ? (foodGroupCounts.protein / totalReviewDays).toFixed(1) : 0,
+                beansNutsSeeds: foodGroupCounts.beansNutsSeeds > 0 ? (foodGroupCounts.beansNutsSeeds / totalReviewDays).toFixed(1) : 0,
+                wildcard: foodGroupCounts.wildcard > 0 ? (foodGroupCounts.wildcard / totalReviewDays).toFixed(1) : 0
             };
 
             let executeFoodLogsCountQuery = `SELECT COUNT(FL.id) as "count" FROM public.food_logs AS FL
@@ -473,7 +473,7 @@ export class UsersService {
                 consecutiveLogs: consecutive,
                 count: foodLogsCount[0]?.count || 0,
                 dataToDisplay: dataToDisplay,
-                avgFoodLogCountPerDay: (avgFoodLogCountPerDay / totalDays).toFixed(1),
+                avgFoodLogCountPerDay: (avgFoodLogCountPerDay / totalReviewDays).toFixed(1),
                 aiConfirmedFoodGroups: aiConfirmedFoodGroups,
                 lastArchiveEndDate: lastArchiveEndDate
             }
@@ -489,14 +489,18 @@ export class UsersService {
         try {
             const offset = (pageNumber - 1) * pageSize;
 
-            const executeFoodLogJournalQuery = `SELECT FL."hunger", FL."consumed", FL."userId", FL."fullness", FL."extra1", FL."extra2", FL."food_type", FL."created_at" AS food_log_created_at,
-                R."whatWentWell", R."whatCouldBeBetter", R."correctiveMeasures", R."thoughts", R."created_at" AS review_created_at
+            const executeFoodLogJournalQuery = `SELECT jsonb_build_object('id', R.id, 'user_id', R."user_id",
+                'whatWentWell', R."whatWentWell", 'whatCouldBeBetter', R."whatCouldBeBetter",
+                'correctiveMeasures', R."correctiveMeasures", 'thoughts', R."thoughts", 'created_at', R."created_at",
+                'foodLogs', COALESCE(jsonb_agg(to_jsonb(FL)) FILTER (WHERE FL.id IS NOT NULL), '[]'::jsonb),
+                'foodLogsCount', COUNT(FL.id)) AS review
                 FROM public.reviews AS R
                 LEFT JOIN public.review_food_logs AS RFL ON R.id = RFL."review_id"
                 LEFT JOIN public.food_logs AS FL ON FL.id = RFL."food_log_id"
                 WHERE R."user_id" = :id
-                ORDER BY R."created_at" DESC
-                LIMIT :pageSize OFFSET :offset`;
+                GROUP BY R.id, R."user_id", R."whatWentWell", R."whatCouldBeBetter", 
+                R."correctiveMeasures", R."thoughts", R."created_at"
+                ORDER BY R."created_at" DESC LIMIT :pageSize OFFSET :offset`;
             const foodLogJournal: any = await this.userModel?.sequelize?.query(
                 executeFoodLogJournalQuery,
                 {
@@ -507,7 +511,6 @@ export class UsersService {
             );
 
             let executeFoodLogJournalCountQuery = `SELECT COUNT(id) as "count" FROM public.reviews WHERE "user_id" = :id`;
-
             const foodLogJournalCount: any = await this.userModel?.sequelize?.query(
                 executeFoodLogJournalCountQuery,
                 {
@@ -517,7 +520,25 @@ export class UsersService {
                 }
             );
 
-            return { success: true, data: { rows: foodLogJournal, count: foodLogJournalCount[0]?.count || 0 }, message: 'User food log journal fetched successfully' };
+            let executeIntentionsDataQuery = `SELECT * FROM public.intentions WHERE "user_id" = :id`;
+            const intentionsData: any = await this.userModel?.sequelize?.query(
+                executeIntentionsDataQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id },
+                }
+            );
+
+            return {
+                success: true,
+                data: {
+                    rows: foodLogJournal,
+                    count: foodLogJournalCount[0]?.count || 0,
+                    intentions: intentionsData
+                },
+                message: 'User food log journal fetched successfully'
+            };
         }
         catch (error) {
             console.error(error, "---error---");

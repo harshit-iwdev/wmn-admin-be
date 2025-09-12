@@ -63,7 +63,7 @@ export class UsersController {
     }
 
     @UseGuards(AuthGuard)
-    @Get('/food-log-journal/:id/:pageNumber/:pageSize')
+    @Get('/journal/:id/:pageNumber/:pageSize')
     async fetchUserFoodLogJournal(
         @Param('id') id: string,
         @Param('pageNumber') pageNumber: number,

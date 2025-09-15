@@ -297,6 +297,51 @@ export class UsersService {
             const foodLogsIdsArr = reviewFoodLogs.map((review: any) => review.food_log_id);
             const reviewIdsArr = Array.from(new Set(reviewFoodLogs.map((review: any) => review.id)));
 
+            let executeAllArchivedFoodLogsQuery = `SELECT * FROM public.food_group_archives AS FGA
+                    WHERE FGA."userId" = :id ORDER BY FGA."created_at" DESC`;
+            const allArchivedFoodLogs: any = await this.userModel?.sequelize?.query(
+                executeAllArchivedFoodLogsQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id },
+                }
+            );
+
+            allArchivedFoodLogs.forEach((log: any) => {
+                if (log.food_groups && Object.keys(log.food_groups).length > 0) {
+                    const sortedEntries = Object.entries(log.food_groups).sort(
+                        ([, a], [, b]) => Number(b) - Number(a)
+                    );
+                    log.food_groups = Object.fromEntries(sortedEntries);
+                }
+            })
+
+            let aiConfirmedFoodGroups = {
+                fruit: { count: 0, description: [] as string[] },
+                vegetable: { count: 0, description: [] as string[] },
+                grain: { count: 0, description: [] as string[] },
+                dairy: { count: 0, description: [] as string[] },
+                protein: { count: 0, description: [] as string[] },
+                beansNutsSeeds: { count: 0, description: [] as string[] },
+                wildcard: { count: 0, description: [] as string[] }
+            };
+
+            // Calculate real food group distribution
+            const foodGroupCounts = {
+                fruit: 0,
+                vegetable: 0,
+                grain: 0,
+                dairy: 0,
+                protein: 0,
+                beansNutsSeeds: 0,
+            }
+
+            // Calculate days between first and last log (inclusive)
+            const timeDiff = new Date(endDate).getTime() - new Date(startDate).getTime();
+            const totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates
+            const totalReviewCount = reviewIdsArr.length;
+
             if (reviewIdsArr.length > 0) {
                 let executeFoodLogsQuery = `SELECT DATE(FL."created_at") AS log_date, jsonb_agg(to_jsonb(FL."food_groups")) AS "foodLogs",
                     jsonb_agg(to_jsonb(AIFR)) AS "aiFoodRecognition" FROM public.food_logs AS FL
@@ -333,16 +378,6 @@ export class UsersService {
                         },
                     }
                 );
-
-                let aiConfirmedFoodGroups = {
-                    fruit: { count: 0, description: [] as string[] },
-                    vegetable: { count: 0, description: [] as string[] },
-                    grain: { count: 0, description: [] as string[] },
-                    dairy: { count: 0, description: [] as string[] },
-                    protein: { count: 0, description: [] as string[] },
-                    beansNutsSeeds: { count: 0, description: [] as string[] },
-                    wildcard: { count: 0, description: [] as string[] }
-                };
 
                 const getFlattenedDescription = (description: string, descriptionArray: string[]) => {
                     description.split(',').forEach((item: string) => {
@@ -381,16 +416,6 @@ export class UsersService {
                     }
                 })
 
-                // Calculate real food group distribution
-                const foodGroupCounts = {
-                    fruit: 0,
-                    vegetable: 0,
-                    grain: 0,
-                    dairy: 0,
-                    protein: 0,
-                    beansNutsSeeds: 0,
-                }
-
                 let consecutive = 0;
                 // data from food logs
                 foodLogs.forEach((log: any) => {
@@ -416,32 +441,6 @@ export class UsersService {
                         }
                     }
                 });
-
-                let executeAllArchivedFoodLogsQuery = `SELECT * FROM public.food_group_archives AS FGA
-                    WHERE FGA."userId" = :id ORDER BY FGA."created_at" DESC`;
-                const allArchivedFoodLogs: any = await this.userModel?.sequelize?.query(
-                    executeAllArchivedFoodLogsQuery,
-                    {
-                        type: QueryTypes.SELECT,
-                        raw: true,
-                        replacements: { id: id },
-                    }
-                );
-
-                allArchivedFoodLogs.forEach((log: any) => {
-                    if (log.food_groups && Object.keys(log.food_groups).length > 0) {
-                        // Convert to entries, parse values as numbers, sort descending
-                        const sortedEntries = Object.entries(log.food_groups).sort(
-                            ([, a], [, b]) => Number(b) - Number(a)
-                        );
-                        log.food_groups = Object.fromEntries(sortedEntries);
-                    }
-                })
-
-                // Calculate days between first and last log (inclusive)
-                const timeDiff = new Date(endDate).getTime() - new Date(startDate).getTime();
-                const totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates
-                const totalReviewCount = reviewIdsArr.length;
 
                 const avgFoodLogsPerDay = {
                     fruit: foodGroupCounts.fruit > 0 ? (foodGroupCounts.fruit / totalReviewCount).toFixed(1) : 0,
@@ -479,7 +478,7 @@ export class UsersService {
                 );
 
                 const avgFoodLogCountPerDay = (foodLogs.length / totalReviewCount).toFixed(0);
-                console.log(avgFoodLogCountPerDay, "avgFoodLogCountPerDay---482");
+
                 let dataToDisplay = false;
                 if (parseInt(foodLogsCount[0]?.count) > 0) {
                     dataToDisplay = true;
@@ -501,7 +500,6 @@ export class UsersService {
                     count: foodLogsCount[0]?.count || 0,
                     dataToDisplay: dataToDisplay,
                     avgFoodLogCountPerDay: avgFoodLogCountPerDay,
-                    // avgFoodLogCountPerDay: (avgFoodLogCountPerDay / totalReviewCount).toFixed(0),
                     aiConfirmedFoodGroups: aiConfirmedFoodGroups,
                     lastArchiveEndDate: lastArchiveEndDate,
                     basicStartDate: basicStartDate
@@ -510,18 +508,40 @@ export class UsersService {
                 return { success: true, data: result, message: 'User food logs fetched successfully' };
             } else {
                 const result = {
-                    foodLogsArchived: [],
-                    foodGroupDistribution: {},
-                    averageFoodLogsPerDay: {},
-                    totalDays: 0,
-                    totalReviewCount: 0,
+                    foodLogsArchived: allArchivedFoodLogs,
+                    foodGroupDistribution: {
+                        "Fruit (F)": 0,
+                        "Vegetable (V)": 0,
+                        "Grain (G)": 0,
+                        "Dairy (D)": 0,
+                        "Protein (P)": 0,
+                        "Beans/Nuts/Seeds (bns)": 0
+                    },
+                    averageFoodLogsPerDay: {
+                        "Fruit (F)": 0,
+                        "Vegetable (V)": 0,
+                        "Grain (G)": 0,
+                        "Dairy (D)": 0,
+                        "Protein (P)": 0,
+                        "Beans/Nuts/Seeds (bns)": 0
+                    },
+                    totalDays: totalDays,
+                    totalReviewCount: totalReviewCount,
                     consecutiveLogs: 0,
                     count: 0,
-                    dataToDisplay: false,
+                    dataToDisplay: true,
                     avgFoodLogCountPerDay: 0,
-                    aiConfirmedFoodGroups: {},
-                    lastArchiveEndDate: null,
-                    basicStartDate: null
+                    aiConfirmedFoodGroups: {
+                        fruit: { count: 0, description: [''] },
+                        vegetable: { count: 0, description: [''] },
+                        grain: { count: 0, description: [''] },
+                        dairy: { count: 0, description: [''] },
+                        protein: { count: 0, description: [''] },
+                        beansNutsSeeds: { count: 0, description: [''] },
+                        wildcard: { count: 0, description: [''] }
+                    },
+                    lastArchiveEndDate: lastArchiveEndDate,
+                    basicStartDate: basicStartDate
                 }
 
                 return { success: true, data: result, message: 'User food logs fetched successfully' };

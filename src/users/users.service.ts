@@ -389,7 +389,6 @@ export class UsersService {
                     dairy: 0,
                     protein: 0,
                     beansNutsSeeds: 0,
-                    // wildcard: 0
                 }
 
                 let consecutive = 0;
@@ -444,8 +443,6 @@ export class UsersService {
                 const totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates
                 const totalReviewCount = reviewIdsArr.length;
 
-                console.log(foodGroupCounts, totalReviewCount, "foodGroupCounts---448");
-
                 const avgFoodLogsPerDay = {
                     fruit: foodGroupCounts.fruit > 0 ? (foodGroupCounts.fruit / totalReviewCount).toFixed(1) : 0,
                     vegetable: foodGroupCounts.vegetable > 0 ? (foodGroupCounts.vegetable / totalReviewCount).toFixed(1) : 0,
@@ -453,7 +450,6 @@ export class UsersService {
                     dairy: foodGroupCounts.dairy > 0 ? (foodGroupCounts.dairy / totalReviewCount).toFixed(1) : 0,
                     protein: foodGroupCounts.protein > 0 ? (foodGroupCounts.protein / totalReviewCount).toFixed(1) : 0,
                     beansNutsSeeds: foodGroupCounts.beansNutsSeeds > 0 ? (foodGroupCounts.beansNutsSeeds / totalReviewCount).toFixed(1) : 0,
-                    // wildcard: foodGroupCounts.wildcard > 0 ? (foodGroupCounts.wildcard / totalReviewCount).toFixed(1) : 0
                 };
 
                 const finalFoodGroupCounts = {

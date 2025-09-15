@@ -478,8 +478,8 @@ export class UsersService {
                     }
                 );
 
-                const avgFoodLogCountPerDay = foodLogs.length / totalReviewCount;
-
+                const avgFoodLogCountPerDay = (foodLogs.length / totalReviewCount).toFixed(0);
+                console.log(avgFoodLogCountPerDay, "avgFoodLogCountPerDay---482");
                 let dataToDisplay = false;
                 if (parseInt(foodLogsCount[0]?.count) > 0) {
                     dataToDisplay = true;
@@ -500,7 +500,8 @@ export class UsersService {
                     consecutiveLogs: consecutive,
                     count: foodLogsCount[0]?.count || 0,
                     dataToDisplay: dataToDisplay,
-                    avgFoodLogCountPerDay: (avgFoodLogCountPerDay / totalReviewCount).toFixed(0),
+                    avgFoodLogCountPerDay: avgFoodLogCountPerDay,
+                    // avgFoodLogCountPerDay: (avgFoodLogCountPerDay / totalReviewCount).toFixed(0),
                     aiConfirmedFoodGroups: aiConfirmedFoodGroups,
                     lastArchiveEndDate: lastArchiveEndDate,
                     basicStartDate: basicStartDate

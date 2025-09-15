@@ -500,7 +500,7 @@ export class UsersService {
                     consecutiveLogs: consecutive,
                     count: foodLogsCount[0]?.count || 0,
                     dataToDisplay: dataToDisplay,
-                    avgFoodLogCountPerDay: (avgFoodLogCountPerDay / totalReviewCount),
+                    avgFoodLogCountPerDay: (avgFoodLogCountPerDay / totalReviewCount).toFixed(0),
                     aiConfirmedFoodGroups: aiConfirmedFoodGroups,
                     lastArchiveEndDate: lastArchiveEndDate,
                     basicStartDate: basicStartDate

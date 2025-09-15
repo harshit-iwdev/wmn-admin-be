@@ -383,7 +383,7 @@ export class UsersService {
                 dairy: 0,
                 protein: 0,
                 beansNutsSeeds: 0,
-                wildcard: 0
+                // wildcard: 0
             }
 
             let consecutive = 0;
@@ -399,7 +399,7 @@ export class UsersService {
                         else if (g === 'd') foodGroupCounts.dairy++
                         else if (g === 'p') foodGroupCounts.protein++
                         else if (g === 'bns') foodGroupCounts.beansNutsSeeds++
-                        else if (g === 'w') foodGroupCounts.wildcard++;
+                        // else if (g === 'w') foodGroupCounts.wildcard++;
                     })
 
                     // calculate consecutive logs
@@ -445,7 +445,7 @@ export class UsersService {
                 dairy: foodGroupCounts.dairy > 0 ? (foodGroupCounts.dairy / totalReviewDays).toFixed(1) : 0,
                 protein: foodGroupCounts.protein > 0 ? (foodGroupCounts.protein / totalReviewDays).toFixed(1) : 0,
                 beansNutsSeeds: foodGroupCounts.beansNutsSeeds > 0 ? (foodGroupCounts.beansNutsSeeds / totalReviewDays).toFixed(1) : 0,
-                wildcard: foodGroupCounts.wildcard > 0 ? (foodGroupCounts.wildcard / totalReviewDays).toFixed(1) : 0
+                // wildcard: foodGroupCounts.wildcard > 0 ? (foodGroupCounts.wildcard / totalReviewDays).toFixed(1) : 0
             };
 
             // Convert to entries, parse values as numbers, sort descending

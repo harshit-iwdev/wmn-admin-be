@@ -19,7 +19,7 @@ export class UsersService {
 
     async findAllUsersList(pageNumber: number, pageSize: number, filters: FilterDto): Promise<IResponse> {
         try {
-            const { searchTerm, sortBy, sortOrder, selectedRole, trial, gift, unsubscribed } = filters;
+            const { searchTerm, sortBy, sortOrder, selectedRole, gift, unsubscribed } = filters;
 
             let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as userMetadata,
                 COALESCE(followers.follower_count, 0) AS "followerCount",
@@ -40,13 +40,13 @@ export class UsersService {
                 executeCountQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
             }
 
-            if (trial && trial.toString() === 'true') {
-                executeDataQuery += ` AND M.trial = true`;
-                executeCountQuery += ` AND M.trial = true`;
-            } else if (trial && trial.toString() === 'false') {
-                executeDataQuery += ` AND M.trial = false`;
-                executeCountQuery += ` AND M.trial = false`;
-            }
+            // if (trial && trial.toString() === 'true') {
+            //     executeDataQuery += ` AND M.trial = true`;
+            //     executeCountQuery += ` AND M.trial = true`;
+            // } else if (trial && trial.toString() === 'false') {
+            //     executeDataQuery += ` AND M.trial = false`;
+            //     executeCountQuery += ` AND M.trial = false`;
+            // }
 
             if (gift && gift.toString() === 'true') {
                 executeDataQuery += ` AND M.gift = true`;
@@ -72,7 +72,7 @@ export class UsersService {
             if (sortBy && sortOrder) {
                 if (sortBy === 'last_seen' || sortBy === 'email') {
                     executeDataQuery += ` ORDER BY U.${sortBy} ${sortOrder}`;
-                } else if (sortBy === 'first_name' || sortBy === 'last_name' || sortBy === 'username' || sortBy === 'cycle' || sortBy === 'pro_day' || sortBy === 'plan' || sortBy === 'renewalNumber') {
+                } else if (sortBy === 'first_name' || sortBy === 'last_name' || sortBy === 'username' || sortBy === 'cycle' || sortBy === 'pro_day' || sortBy === 'plan' || sortBy === 'renewalNumber' || sortBy === 'revCatTrial') {
                     executeDataQuery += ` ORDER BY M."${sortBy}" ${sortOrder}`;
                 }
             } else {
@@ -234,7 +234,7 @@ export class UsersService {
 
     async formatDateLocal(date: Date | string) {
         if (typeof date === 'string') {
-          date = new Date(date);
+            date = new Date(date);
         }
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -262,7 +262,7 @@ export class UsersService {
                 tempEndDate = tempEndDate.toISOString();
                 tempEndDate = await this.formatDateLocal(tempEndDate);
                 lastArchiveEndDate = tempEndDate;
-            } else {    
+            } else {
                 const userCreationDate: any = await this.userModel?.sequelize?.query(
                     `SELECT "created_at" as "createdAt" FROM auth.users WHERE "id" = :id`,
                     {
@@ -281,7 +281,7 @@ export class UsersService {
             let executeReviewFoodLogsQuery = `Select R."user_id", RFL."food_log_id" from public.reviews as R
                 join public."review_food_logs" as RFL on RFL."review_id" = R."id"
                 where R."user_id" = :id and Date(R."created_at") >= :startDate and Date(R."created_at") <= :endDate`;
-                
+
             const reviewFoodLogs: any = await this.userModel?.sequelize?.query(
                 executeReviewFoodLogsQuery,
                 {
@@ -349,25 +349,25 @@ export class UsersService {
             aiFoodLogs.forEach((log: any) => {
                 if (log.foodAiData.length > 0) {
                     log.foodAiData.forEach((item: any) => {
-                        if (item.foodGroup === 'fruit') {
+                        if (item.foodGroup.toLowerCase() === 'fruit') {
                             aiConfirmedFoodGroups.fruit.count++;
                             aiConfirmedFoodGroups.fruit.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.fruit.description)
-                        } else if (item.foodGroup === 'vegetable') {
+                        } else if (item.foodGroup.toLowerCase() === 'vegetable') {
                             aiConfirmedFoodGroups.vegetable.count++;
                             aiConfirmedFoodGroups.vegetable.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.vegetable.description)
-                        } else if (item.foodGroup === 'grain') {
+                        } else if (item.foodGroup.toLowerCase() === 'grain') {
                             aiConfirmedFoodGroups.grain.count++;
                             aiConfirmedFoodGroups.grain.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.grain.description)
-                        } else if (item.foodGroup === 'dairy') {
+                        } else if (item.foodGroup.toLowerCase() === 'dairy') {
                             aiConfirmedFoodGroups.dairy.count++;
                             aiConfirmedFoodGroups.dairy.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.dairy.description)
-                        } else if (item.foodGroup === 'protein') {
+                        } else if (item.foodGroup.toLowerCase() === 'protein') {
                             aiConfirmedFoodGroups.protein.count++;
                             aiConfirmedFoodGroups.protein.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.protein.description)
-                        } else if (item.foodGroup === 'beansNutsSeeds') {
+                        } else if (item.foodGroup.toLowerCase() === 'bns' || item.foodGroup.toLowerCase() === 'beansNutsSeeds') {
                             aiConfirmedFoodGroups.beansNutsSeeds.count++;
                             aiConfirmedFoodGroups.beansNutsSeeds.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.beansNutsSeeds.description)
-                        } else if (item.foodGroup === 'wildCard') {
+                        } else if (item.foodGroup.toLowerCase() === 'wildcard') {
                             aiConfirmedFoodGroups.wildcard.count++;
                             aiConfirmedFoodGroups.wildcard.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.wildcard.description)
                         }
@@ -399,7 +399,7 @@ export class UsersService {
                         else if (g === 'd') foodGroupCounts.dairy++
                         else if (g === 'p') foodGroupCounts.protein++
                         else if (g === 'bns') foodGroupCounts.beansNutsSeeds++
-                        else foodGroupCounts.wildcard++;
+                        else if (g === 'w') foodGroupCounts.wildcard++;
                     })
 
                     // calculate consecutive logs
@@ -423,6 +423,16 @@ export class UsersService {
                 }
             );
 
+            allArchivedFoodLogs.forEach((log: any) => {
+                if (log.food_groups && Object.keys(log.food_groups).length > 0) {
+                    // Convert to entries, parse values as numbers, sort descending
+                    const sortedEntries = Object.entries(log.food_groups).sort(
+                        ([, a], [, b]) => Number(b) - Number(a)
+                    );
+                    log.food_groups = Object.fromEntries(sortedEntries);
+                }
+            })
+
             // Calculate days between first and last log (inclusive)
             const timeDiff = new Date(endDate).getTime() - new Date(startDate).getTime();
             const totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates
@@ -437,6 +447,12 @@ export class UsersService {
                 beansNutsSeeds: foodGroupCounts.beansNutsSeeds > 0 ? (foodGroupCounts.beansNutsSeeds / totalReviewDays).toFixed(1) : 0,
                 wildcard: foodGroupCounts.wildcard > 0 ? (foodGroupCounts.wildcard / totalReviewDays).toFixed(1) : 0
             };
+
+            // Convert to entries, parse values as numbers, sort descending
+            const sortedEntries = Object.entries(avgFoodLogsPerDay).sort(
+                ([, a], [, b]) => Number(b) - Number(a)
+            );
+            const sortedObj = Object.fromEntries(sortedEntries);
 
             let executeFoodLogsCountQuery = `SELECT COUNT(FL.id) as "count" FROM public.food_logs AS FL
             WHERE FL."userId" = :id and FL."created_at" >= :startDate and FL."created_at" <= :endDate`;
@@ -467,7 +483,7 @@ export class UsersService {
             const result = {
                 foodLogsArchived: allArchivedFoodLogs,
                 foodGroupDistribution: foodGroupCounts,
-                averageLogsPerDay: avgFoodLogsPerDay,
+                averageFoodLogsPerDay: sortedObj,
                 totalDays: totalDays,
                 totalReviewDays: totalReviewDays,
                 consecutiveLogs: consecutive,

@@ -9,7 +9,7 @@ export class FilterDto {
     sortBy: string;
     sortOrder: string;
     selectedRole: string;
-    trial: string;
+    // revCatTrial: string;
     gift: string;
     unsubscribed: string;
 }

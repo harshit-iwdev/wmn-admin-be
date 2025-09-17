@@ -292,11 +292,9 @@ export class UsersService {
                 let tempEndDate = lastArchiveDate[0]?.endDate;
                 tempEndDate = new Date(tempEndDate);
                 tempEndDate.setDate(tempEndDate.getDate() + 1);
-                // tempEndDate = tempEndDate.toISOString();
                 tempEndDate = await this.formatDateUTC(tempEndDate);
                 lastArchiveEndDate = tempEndDate;
                 basicStartDate = new Date(tempEndDate);
-                // basicStartDate = basicStartDate.toISOString();
                 basicStartDate = await this.formatDateUTC(basicStartDate);
             } else {
                 const userCreationDate: any = await this.userModel?.sequelize?.query(
@@ -317,7 +315,6 @@ export class UsersService {
             let executeReviewFoodLogsQuery = `Select R."id", R."user_id", RFL."food_log_id" from public.reviews as R
                 join public."review_food_logs" as RFL on RFL."review_id" = R."id"
                 where R."user_id" = :id and Date(R."review_date") >= :startDate and Date(R."review_date") <= :endDate`;
-            // where R."user_id" = :id and Date(R."created_at") >= :startDate and Date(R."created_at") <= :endDate`;
 
             const reviewFoodLogs: any = await this.userModel?.sequelize?.query(
                 executeReviewFoodLogsQuery,
@@ -329,8 +326,7 @@ export class UsersService {
             );
             const foodLogsIdsArr = Array.from(new Set(reviewFoodLogs.map((review: any) => review.food_log_id)));
             const reviewIdsArr = Array.from(new Set(reviewFoodLogs.map((review: any) => review.id)));
-            console.log(reviewIdsArr, reviewIdsArr.length, "---reviewIdsArr---309");
-            console.log(foodLogsIdsArr.length, "---foodLogsIdsArr---310");
+
             let executeAllArchivedFoodLogsQuery = `SELECT * FROM public.food_group_archives AS FGA
                     WHERE FGA."userId" = :id ORDER BY FGA."created_at" DESC`;
             const allArchivedFoodLogs: any = await this.userModel?.sequelize?.query(
@@ -407,9 +403,7 @@ export class UsersService {
                         },
                     }
                 );
-                console.log(allFoodLogs, "---allFoodLogs---388");
                 const foodLogs = await this.mergeFoodLogs(allFoodLogs);
-                console.log(foodLogs, "---foodLogs---412");
 
                 let executeAiFoodLogsQuery = `SELECT * FROM public.ai_food_recognition 
                     WHERE "userId" = :id AND "createdAt" >= :startDate AND "createdAt" <= :endDate`;
@@ -467,7 +461,6 @@ export class UsersService {
                 let consecutive = 0;
                 // data from food logs
                 foodLogs.forEach((log: any) => {
-                    // console.log(log, "---log---432");
                     if (log.foodLogs && log.foodLogs.length > 0) {
                         const oneGroup = log.foodLogs.flat();
                         let grp = oneGroup.map((group: string) => group.toLowerCase());
@@ -485,7 +478,6 @@ export class UsersService {
                         const uniqueFoodGroups = [...new Set(grp)];
                         const hasAllGroups = foodGroupsOrder.every(g => uniqueFoodGroups.includes(g));
                         if (hasAllGroups) {
-                            console.log(uniqueFoodGroups, log.review_id, log.log_dates, "---uniqueFoodGroups---449");
                             consecutive++;
                         }
                     }
@@ -608,9 +600,8 @@ export class UsersService {
             const executeFoodLogJournalQuery = `SELECT jsonb_build_object('id', R.id, 'user_id', R."user_id",
                 'whatWentWell', R."whatWentWell", 'whatCouldBeBetter', R."whatCouldBeBetter",
                 'correctiveMeasures', R."correctiveMeasures", 'thoughts', R."thoughts", 'created_at', R."created_at",
-                'foodLogs', COALESCE(jsonb_agg(to_jsonb(FL)) FILTER (WHERE FL.id IS NOT NULL), '[]'::jsonb),
-                'foodLogsCount', COUNT(FL.id)) AS review
-                FROM public.reviews AS R
+                'foodLogs', COALESCE(jsonb_agg(to_jsonb(FL) ORDER BY FL."created_at" DESC) FILTER (WHERE FL.id IS NOT NULL), '[]'::jsonb),
+                'foodLogsCount', COUNT(FL.id)) AS review FROM public.reviews AS R
                 LEFT JOIN public.review_food_logs AS RFL ON R.id = RFL."review_id"
                 LEFT JOIN public.food_logs AS FL ON FL.id = RFL."food_log_id"
                 WHERE R."user_id" = :id
@@ -645,9 +636,7 @@ export class UsersService {
                     replacements: { id: id },
                 }
             );
-            console.log(userIntentionsData, "---userIntentionsData---609");
             const intentionArr = userIntentionsData[0].intentions;
-            console.log(intentionArr, "---intentionArr---");
 
             let userIntentions: any = [];
             intentionArr.forEach(async (item: any) => {
@@ -661,26 +650,17 @@ export class UsersService {
                             replacements: { id: id, question_slug: item },
                         }
                     );
-                    console.log(intentionsData, "---intentionsData---");
                     if (intentionsData.length > 0) {
                         userIntentions.push(intentionsData[0]);
                     }
                 }
             });
-            console.log(userIntentions, "---userIntentions---");
-
-            // foodLogJournal.map(async (item: any) => )
 
             for (let i = 0; i < foodLogJournal.length; i++) {
                 const item = foodLogJournal[i];
                 let reviewCreatedAt = new Date(item.review.created_at);
-                // reviewCreatedAt = new Date(reviewCreatedAt.setDate(reviewCreatedAt.getDate() - 1));
-                // reviewCreatedAt = reviewCreatedAt.toISOString();
                 let reviewCreatedAtUTC = await this.formatDateUTC(reviewCreatedAt);
-                console.log(reviewCreatedAtUTC, "---reviewCreatedAtUTC---");
-                console.log(item.review.question_slug, "---item.review.question_slug---");
 
-                // -- AND "uid" = :review_id 
                 let executeDailyIntentionsDataQuery = `SELECT "question_slug" as "question_slug", "values" FROM public.answers WHERE "user_id" = :id 
                 AND "question_slug" IN (:question_slug) AND Date("created_at") = :created_at`;
                 const dailyIntentionsData: any = await this.userModel?.sequelize?.query(
@@ -691,11 +671,13 @@ export class UsersService {
                         replacements: { id: id, question_slug: intentionArr, created_at: reviewCreatedAtUTC },
                     }
                 );
-                console.log(dailyIntentionsData, "---dailyIntentionsData---");
-                item.review['dailyIntentions'] = dailyIntentionsData;
+                item.review['dailyIntentions'] = dailyIntentionsData.map((item: any) => {
+                    return {
+                        ...item,
+                        question_slug: item.question_slug.split('-')[1].charAt(0).toUpperCase() + item.question_slug.split('-')[1].slice(1)
+                    };
+                });
             }
-            console.log(foodLogJournal, "---foodLogJournal---");
-
 
             let executeIntentionsDataQuery = `SELECT * FROM public.intentions WHERE "user_id" = :id`;
             const intentionsData: any = await this.userModel?.sequelize?.query(
@@ -707,13 +689,20 @@ export class UsersService {
                 }
             );
 
+            let finalIntentionsData: any = [];
+            intentionsData.forEach((item: any) => {
+                finalIntentionsData.push({
+                    ...item,
+                    question_slug: item.question_slug.split('-')[1].charAt(0).toUpperCase() + item.question_slug.split('-')[1].slice(1)
+                });
+            });
+
             return {
                 success: true,
                 data: {
                     rows: foodLogJournal,
                     count: foodLogJournalCount[0]?.count || 0,
-                    previousIntentions: intentionsData,
-                    intentions: userIntentions
+                    previousIntentions: finalIntentionsData,
                 },
                 message: 'User food log journal fetched successfully'
             };

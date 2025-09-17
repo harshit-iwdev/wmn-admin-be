@@ -518,7 +518,7 @@ export class UsersService {
                     }
                 );
 
-                const avgFoodLogCountPerDay = (foodLogsIdsArr.length / totalReviewCount).toFixed(1);
+                const avgFoodLogCountPerDay = Math.round(foodLogsIdsArr.length / totalReviewCount);
 
                 let dataToDisplay = false;
                 if (parseInt(foodLogsCount[0]?.count) > 0) {

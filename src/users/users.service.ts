@@ -260,6 +260,7 @@ export class UsersService {
                 merged[item.review_id] = {
                     review_id: item.review_id,
                     review_created_at: item.review_created_at,
+                    review_date: item.review_date,
                     log_dates: [item.log_date],   // keep all log dates if needed
                     foodLogs: [...item.foodLogs],
                     aiFoodRecognition: [...item.aiFoodRecognition],
@@ -290,12 +291,16 @@ export class UsersService {
             );
             if (lastArchiveDate[0]?.endDate) {
                 let tempEndDate = lastArchiveDate[0]?.endDate;
+                lastArchiveEndDate = tempEndDate;
                 tempEndDate = new Date(tempEndDate);
                 tempEndDate.setDate(tempEndDate.getDate() + 1);
                 tempEndDate = await this.formatDateUTC(tempEndDate);
-                lastArchiveEndDate = tempEndDate;
-                basicStartDate = new Date(tempEndDate);
-                basicStartDate = await this.formatDateUTC(basicStartDate);
+                // lastArchiveEndDate = tempEndDate;
+                basicStartDate = tempEndDate;
+                // basicStartDate.setDate(basicStartDate.getDate() + 1);
+                // basicStartDate = new Date(tempEndDate);
+                // basicStartDate = await this.formatDateUTC(basicStartDate);
+                console.log(lastArchiveEndDate, basicStartDate, "---lastArchiveEndDate, basicStartDate---299");
             } else {
                 const userCreationDate: any = await this.userModel?.sequelize?.query(
                     `SELECT "created_at" as "createdAt" FROM auth.users WHERE "id" = :id`,
@@ -306,15 +311,18 @@ export class UsersService {
                     }
                 );
                 lastArchiveEndDate = userCreationDate[0]?.createdAt;
+                basicStartDate = new Date(lastArchiveEndDate);
+                basicStartDate.setDate(basicStartDate.getDate() + 1);
+                // basicStartDate = await this.formatDateUTC(basicStartDate);
             }
             if (startDate.length === 0 && endDate.length === 0) {
                 startDate = await this.formatDateLocal(lastArchiveEndDate);
                 endDate = await this.formatDateLocal(new Date());
             }
 
-            let executeReviewFoodLogsQuery = `Select R."id", R."user_id", RFL."food_log_id" from public.reviews as R
-                join public."review_food_logs" as RFL on RFL."review_id" = R."id"
-                where R."user_id" = :id and Date(R."review_date") >= :startDate and Date(R."review_date") <= :endDate`;
+            let executeReviewFoodLogsQuery = `Select "R"."id", "R"."user_id", "RFL"."food_log_id" from public.reviews as "R"
+                join public."review_food_logs" as "RFL" on "RFL"."review_id" = "R"."id"
+                where "R"."user_id" = :id and Date("R"."review_date") >= :startDate and Date("R"."review_date") <= :endDate`;
 
             const reviewFoodLogs: any = await this.userModel?.sequelize?.query(
                 executeReviewFoodLogsQuery,
@@ -326,7 +334,6 @@ export class UsersService {
             );
             const foodLogsIdsArr = Array.from(new Set(reviewFoodLogs.map((review: any) => review.food_log_id)));
             const reviewIdsArr = Array.from(new Set(reviewFoodLogs.map((review: any) => review.id)));
-
             let executeAllArchivedFoodLogsQuery = `SELECT * FROM public.food_group_archives AS FGA
                     WHERE FGA."userId" = :id ORDER BY FGA."created_at" DESC`;
             const allArchivedFoodLogs: any = await this.userModel?.sequelize?.query(
@@ -371,7 +378,7 @@ export class UsersService {
             const timeDiff = new Date(endDate).getTime() - new Date(startDate).getTime();
             const totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates
             const totalReviewCount = reviewIdsArr.length;
-
+            
             if (reviewIdsArr.length > 0) {
                 // let executeFoodLogsQuery = `SELECT DATE(FL."created_at") AS log_date, jsonb_agg(to_jsonb(FL."food_groups")) AS "foodLogs",
                 //     jsonb_agg(to_jsonb(AIFR)) AS "aiFoodRecognition" FROM public.food_logs AS FL
@@ -380,14 +387,14 @@ export class UsersService {
                 //     GROUP BY DATE(FL."created_at") ORDER BY log_date ASC;`;
 
                 let executeFoodLogsQuery = `SELECT DATE("FL"."created_at") AS log_date,
-                    "RFL"."review_id", "R"."created_at" as "review_created_at", jsonb_agg(to_jsonb("FL"."food_groups")) AS "foodLogs",
+                    "RFL"."review_id", "R"."created_at" as "review_created_at", "R"."review_date" as "review_date", jsonb_agg(to_jsonb("FL"."food_groups")) AS "foodLogs",
                     jsonb_agg(to_jsonb("AIFR")) AS "aiFoodRecognition" FROM public.food_logs AS "FL"
                     LEFT JOIN public."ai_food_recognition" AS "AIFR" ON "FL"."ai_food_data_id" = "AIFR"."id"
                     JOIN public."review_food_logs" as "RFL" on "RFL"."food_log_id" = "FL"."id"
                     JOIN public."reviews" as "R" on "RFL"."review_id" = "R"."id"
                         WHERE "FL"."userId" = :id AND "FL"."id" IN (:foodLogsIdsArr)
                             GROUP BY DATE("FL"."created_at"), 
-                            "RFL"."review_id", "R"."created_at"
+                            "RFL"."review_id", "R"."created_at", "R"."review_date"
                             ORDER BY log_date ASC;`;
 
                 const allFoodLogs: any = await this.userModel?.sequelize?.query(
@@ -403,8 +410,8 @@ export class UsersService {
                         },
                     }
                 );
-                const foodLogs = await this.mergeFoodLogs(allFoodLogs);
 
+                const foodLogs = await this.mergeFoodLogs(allFoodLogs);
                 let executeAiFoodLogsQuery = `SELECT * FROM public.ai_food_recognition 
                     WHERE "userId" = :id AND "createdAt" >= :startDate AND "createdAt" <= :endDate`;
 
@@ -518,6 +525,7 @@ export class UsersService {
                     }
                 );
 
+                // const avgFoodLogCountPerDay = (foodLogsIdsArr.length / totalReviewCount).toFixed(1);
                 const avgFoodLogCountPerDay = Math.round(foodLogsIdsArr.length / totalReviewCount);
 
                 let dataToDisplay = false;
@@ -597,17 +605,17 @@ export class UsersService {
         try {
             const offset = (pageNumber - 1) * pageSize;
 
-            const executeFoodLogJournalQuery = `SELECT jsonb_build_object('id', R.id, 'user_id', R."user_id",
-                'whatWentWell', R."whatWentWell", 'whatCouldBeBetter', R."whatCouldBeBetter",
-                'correctiveMeasures', R."correctiveMeasures", 'thoughts', R."thoughts", 'created_at', R."created_at",
-                'foodLogs', COALESCE(jsonb_agg(to_jsonb(FL) ORDER BY FL."created_at" DESC) FILTER (WHERE FL.id IS NOT NULL), '[]'::jsonb),
-                'foodLogsCount', COUNT(FL.id)) AS review FROM public.reviews AS R
-                LEFT JOIN public.review_food_logs AS RFL ON R.id = RFL."review_id"
-                LEFT JOIN public.food_logs AS FL ON FL.id = RFL."food_log_id"
-                WHERE R."user_id" = :id
-                GROUP BY R.id, R."user_id", R."whatWentWell", R."whatCouldBeBetter", 
-                R."correctiveMeasures", R."thoughts", R."created_at"
-                ORDER BY R."created_at" DESC LIMIT :pageSize OFFSET :offset`;
+            const executeFoodLogJournalQuery = `SELECT jsonb_build_object('id', R.id, 'user_id', R."user_id", 'review_date', R."review_date",
+            'whatWentWell', R."whatWentWell", 'whatCouldBeBetter', R."whatCouldBeBetter",
+            'correctiveMeasures', R."correctiveMeasures", 'thoughts', R."thoughts", 'created_at', R."created_at",
+            'foodLogs', COALESCE(jsonb_agg(to_jsonb(FL) ORDER BY FL."created_at" DESC) FILTER (WHERE FL.id IS NOT NULL), '[]'::jsonb),
+            'foodLogsCount', COUNT(FL.id)) AS review FROM public.reviews AS R
+            LEFT JOIN public.review_food_logs AS RFL ON R.id = RFL."review_id"
+            LEFT JOIN public.food_logs AS FL ON FL.id = RFL."food_log_id"
+            WHERE R."user_id" = :id
+            GROUP BY R.id, R."user_id", R."whatWentWell", R."whatCouldBeBetter", 
+            R."correctiveMeasures", R."thoughts", R."created_at"
+            ORDER BY Date(R."review_date") DESC LIMIT :pageSize OFFSET :offset`;            
             let foodLogJournal: any = await this.userModel?.sequelize?.query(
                 executeFoodLogJournalQuery,
                 {
@@ -636,8 +644,8 @@ export class UsersService {
                     replacements: { id: id },
                 }
             );
-            const intentionArr = userIntentionsData[0].intentions;
-
+            let intentionArr = userIntentionsData[0].intentions;
+            intentionArr = [ ...intentionArr, 'review-corrective-measures', 'review-do-well', 'review-done-better' ];
             let userIntentions: any = [];
             intentionArr.forEach(async (item: any) => {
                 if (item) {
@@ -658,25 +666,33 @@ export class UsersService {
 
             for (let i = 0; i < foodLogJournal.length; i++) {
                 const item = foodLogJournal[i];
-                let reviewCreatedAt = new Date(item.review.created_at);
-                let reviewCreatedAtUTC = await this.formatDateUTC(reviewCreatedAt);
-
-                let executeDailyIntentionsDataQuery = `SELECT "question_slug" as "question_slug", "values" FROM public.answers WHERE "user_id" = :id 
-                AND "question_slug" IN (:question_slug) AND Date("created_at") = :created_at`;
+            
+                let executeDailyIntentionsDataQuery = `SELECT "question_slug" as "question_slug", "values", "uid" FROM public.answers WHERE "user_id" = :id 
+                AND "question_slug" IN (:question_slug) AND uid = :uid`;
                 const dailyIntentionsData: any = await this.userModel?.sequelize?.query(
                     executeDailyIntentionsDataQuery,
                     {
                         type: QueryTypes.SELECT,
                         raw: true,
-                        replacements: { id: id, question_slug: intentionArr, created_at: reviewCreatedAtUTC },
+                        replacements: {
+                            id: id, 
+                            question_slug: intentionArr, 
+                            uid: 'review-'+item.review.review_date
+                        },
                     }
                 );
-                item.review['dailyIntentions'] = dailyIntentionsData.map((item: any) => {
-                    return {
-                        ...item,
-                        question_slug: item.question_slug.split('-')[1].charAt(0).toUpperCase() + item.question_slug.split('-')[1].slice(1)
-                    };
+
+                item.review['dailyIntentions'] = dailyIntentionsData.filter((item: any) => {
+                    if (item.question_slug.startsWith('intention-')) {
+                        return {
+                            ...item,
+                            question_slug: item.question_slug.split('-')[1].charAt(0).toUpperCase() + item.question_slug.split('-')[1].slice(1)
+                        };
+                    }
                 });
+                item.review.whatCouldBeBetter = dailyIntentionsData.find((item: any) => item.question_slug === 'review-done-better')?.values;
+                item.review.whatWentWell = dailyIntentionsData.find((item: any) => item.question_slug === 'review-do-well')?.values;
+                item.review.correctiveMeasures = dailyIntentionsData.find((item: any) => item.question_slug === 'review-corrective-measures')?.values;
             }
 
             let executeIntentionsDataQuery = `SELECT * FROM public.intentions WHERE "user_id" = :id`;

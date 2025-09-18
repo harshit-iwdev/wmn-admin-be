@@ -9,13 +9,14 @@ export class UsersController {
 
     constructor(private readonly usersService: UsersService) {}
 
-    @Post('/all/:pageNumber/:pageSize')
+    @Post('/get/:userType/:pageNumber/:pageSize')
     async fetchAllUsersList(
+        @Param('userType') userType: string,
         @Param('pageNumber') pageNumber: number,
         @Param('pageSize') pageSize: number,
         @Body() filters: FilterDto
     ): Promise<IResponse> {
-        return this.usersService.findAllUsersList(pageNumber, pageSize, filters);
+        return this.usersService.findAllUsersList(userType, pageNumber, pageSize, filters);
     }
 
     @UseGuards(AuthGuard)

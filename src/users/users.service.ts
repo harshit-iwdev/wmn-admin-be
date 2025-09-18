@@ -17,7 +17,7 @@ export class UsersService {
         return this.userModel.findAll();
     }
 
-    async findAllUsersList(pageNumber: number, pageSize: number, filters: FilterDto): Promise<IResponse> {
+    async findAllUsersList(userType: string, pageNumber: number, pageSize: number, filters: FilterDto): Promise<IResponse> {
         try {
             const { searchTerm, sortBy, sortOrder, selectedRole, gift, unsubscribed } = filters;
 
@@ -39,6 +39,12 @@ export class UsersService {
                 executeDataQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
                 executeCountQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
             }
+
+            if (userType === 'practitioner') {
+                executeDataQuery += ` AND M.user_type = 'practitioner'`;
+                executeCountQuery += ` AND M.user_type = 'practitioner'`;
+            }
+
 
             // if (trial && trial.toString() === 'true') {
             //     executeDataQuery += ` AND M.trial = true`;
@@ -378,7 +384,7 @@ export class UsersService {
             const timeDiff = new Date(endDate).getTime() - new Date(startDate).getTime();
             const totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates
             const totalReviewCount = reviewIdsArr.length;
-            
+
             if (reviewIdsArr.length > 0) {
                 // let executeFoodLogsQuery = `SELECT DATE(FL."created_at") AS log_date, jsonb_agg(to_jsonb(FL."food_groups")) AS "foodLogs",
                 //     jsonb_agg(to_jsonb(AIFR)) AS "aiFoodRecognition" FROM public.food_logs AS FL
@@ -525,8 +531,8 @@ export class UsersService {
                     }
                 );
 
-                const avgFoodLogCountPerDay = (foodLogsIdsArr.length / totalReviewCount).toFixed(1);
-                // const avgFoodLogCountPerDay = Math.round(foodLogsIdsArr.length / totalReviewCount);
+                // const avgFoodLogCountPerDay = (foodLogsIdsArr.length / totalReviewCount).toFixed(1);
+                const avgFoodLogCountPerDay = Math.round(foodLogsIdsArr.length / totalReviewCount);
 
                 let dataToDisplay = false;
                 if (parseInt(foodLogsCount[0]?.count) > 0) {
@@ -615,7 +621,7 @@ export class UsersService {
             WHERE R."user_id" = :id
             GROUP BY R.id, R."user_id", R."whatWentWell", R."whatCouldBeBetter", 
             R."correctiveMeasures", R."thoughts", R."created_at"
-            ORDER BY Date(R."review_date") DESC LIMIT :pageSize OFFSET :offset`;            
+            ORDER BY Date(R."review_date") DESC LIMIT :pageSize OFFSET :offset`;
             let foodLogJournal: any = await this.userModel?.sequelize?.query(
                 executeFoodLogJournalQuery,
                 {
@@ -645,7 +651,7 @@ export class UsersService {
                 }
             );
             let intentionArr = userIntentionsData[0].intentions;
-            intentionArr = [ ...intentionArr, 'review-corrective-measures', 'review-do-well', 'review-done-better' ];
+            intentionArr = [...intentionArr, 'review-corrective-measures', 'review-do-well', 'review-done-better'];
             let userIntentions: any = [];
             intentionArr.forEach(async (item: any) => {
                 if (item) {
@@ -666,7 +672,7 @@ export class UsersService {
 
             for (let i = 0; i < foodLogJournal.length; i++) {
                 const item = foodLogJournal[i];
-            
+
                 let executeDailyIntentionsDataQuery = `SELECT "question_slug" as "question_slug", "values", "uid" FROM public.answers WHERE "user_id" = :id 
                 AND "question_slug" IN (:question_slug) AND uid = :uid`;
                 const dailyIntentionsData: any = await this.userModel?.sequelize?.query(
@@ -675,24 +681,54 @@ export class UsersService {
                         type: QueryTypes.SELECT,
                         raw: true,
                         replacements: {
-                            id: id, 
-                            question_slug: intentionArr, 
-                            uid: 'review-'+item.review.review_date
+                            id: id,
+                            question_slug: intentionArr,
+                            uid: 'review-' + item.review.review_date
                         },
                     }
                 );
 
-                item.review['dailyIntentions'] = dailyIntentionsData.filter((item: any) => {
+                let dailyIntentionsArr: any = [];
+                dailyIntentionsData.map((item: any) => {
                     if (item.question_slug.startsWith('intention-')) {
-                        return {
+                        const newSlugName = item.question_slug.split('-')[1].charAt(0).toUpperCase() + item.question_slug.split('-')[1].slice(1)
+                        dailyIntentionsArr.push({
                             ...item,
-                            question_slug: item.question_slug.split('-')[1].charAt(0).toUpperCase() + item.question_slug.split('-')[1].slice(1)
-                        };
+                            question_slug: newSlugName
+                        });
                     }
                 });
+                item.review['dailyIntentions'] = dailyIntentionsArr;
                 item.review.whatCouldBeBetter = dailyIntentionsData.find((item: any) => item.question_slug === 'review-done-better')?.values;
                 item.review.whatWentWell = dailyIntentionsData.find((item: any) => item.question_slug === 'review-do-well')?.values;
                 item.review.correctiveMeasures = dailyIntentionsData.find((item: any) => item.question_slug === 'review-corrective-measures')?.values;
+
+                // Calculate real food group distribution
+                const foodGroupCounts = {
+                    fruit: 0,
+                    vegetable: 0,
+                    grain: 0,
+                    dairy: 0,
+                    protein: 0,
+                    beansNutsSeeds: 0,
+                }
+
+                item.review.foodLogs.forEach((log: any) => {
+                    if (log.food_groups && log.food_groups.length > 0) {
+                        const oneGroup = log.food_groups;
+                        let grp = oneGroup.map((group: string) => group && group.toLowerCase());
+                        grp.forEach((g: string) => {
+                            if (g === 'f') foodGroupCounts.fruit++
+                            else if (g === 'v') foodGroupCounts.vegetable++
+                            else if (g === 'g') foodGroupCounts.grain++
+                            else if (g === 'd') foodGroupCounts.dairy++
+                            else if (g === 'p') foodGroupCounts.protein++
+                            else if (g === 'bns') foodGroupCounts.beansNutsSeeds++
+                        });
+                    }
+                });
+
+                item.review.foodGroupDistribution = foodGroupCounts;
             }
 
             let executeIntentionsDataQuery = `SELECT * FROM public.intentions WHERE "user_id" = :id`;
@@ -705,9 +741,24 @@ export class UsersService {
                 }
             );
 
-            let finalIntentionsData: any = [];
+            let finalPreviousIntentionsData: any = [];
             intentionsData.forEach((item: any) => {
-                finalIntentionsData.push({
+                let index = userIntentions.findIndex((dt: any) => {
+                    if (dt.question_slug === item.question_slug) {
+                        return true;
+                    }
+                })
+                if (index === -1) {
+                    finalPreviousIntentionsData.push({
+                        ...item,
+                        question_slug: item.question_slug.split('-')[1].charAt(0).toUpperCase() + item.question_slug.split('-')[1].slice(1)
+                    });
+                }
+            });
+
+            let finalCurrentIntentionsData: any = [];
+            userIntentions.forEach((item: any) => {
+                finalCurrentIntentionsData.push({
                     ...item,
                     question_slug: item.question_slug.split('-')[1].charAt(0).toUpperCase() + item.question_slug.split('-')[1].slice(1)
                 });
@@ -718,7 +769,8 @@ export class UsersService {
                 data: {
                     rows: foodLogJournal,
                     count: foodLogJournalCount[0]?.count || 0,
-                    previousIntentions: finalIntentionsData,
+                    previousIntentions: finalPreviousIntentionsData,
+                    currentIntentions: finalCurrentIntentionsData,
                 },
                 message: 'User food log journal fetched successfully'
             };
@@ -799,18 +851,22 @@ export class UsersService {
                 WHERE M."user_type" != 'practitioner' AND M."plan" NOT IN ('free', 'trial', 'dev')`);
 
             const activeUserCount: any = await this.userModel?.sequelize?.query(
-                `SELECT COUNT(DISTINCT(U.id)) as "activeUserCount" FROM auth.users AS U
-                WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '7 day'`);
+                `SELECT COUNT(DISTINCT(U.id)) as "activeUserCount" FROM auth.users AS U WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '28 day'`);
 
             const onboardedUserCount: any = await this.userModel?.sequelize?.query(
                 `SELECT COUNT(DISTINCT(M.user_id)) as "onboardedUserCount" FROM public.metadata AS M
                 WHERE M."onboarded" = true`);
 
+            const newCustomerCount: any = await this.userModel?.sequelize?.query(
+                `SELECT COUNT(id) AS "newCustomerCount" FROM auth.users
+                WHERE created_at >= NOW() - INTERVAL '28 days'`);
+
             return {
                 success: true, data: {
                     proUserCount: proUserCount[0][0]?.proUserCount || 0,
                     activeUserCount: activeUserCount[0][0]?.activeUserCount || 0,
-                    onboardedUserCount: onboardedUserCount[0][0]?.onboardedUserCount || 0
+                    onboardedUserCount: onboardedUserCount[0][0]?.onboardedUserCount || 0,
+                    newCustomerCount: newCustomerCount[0][0]?.newCustomerCount || 0
                 }, message: 'Pro user count fetched successfully'
             };
         } catch (error) {

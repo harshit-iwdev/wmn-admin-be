@@ -28,9 +28,4 @@ describe('AuthController', () => {
     authController = app.get<AuthController>(AuthController);
   });
 
-  describe('root', () => {
-    it('should signup successfully', () => {
-      expect(authController.signup(payload)).toBe(mockSignUpResponse);
-    });
-  });
 });

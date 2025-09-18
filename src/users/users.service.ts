@@ -301,12 +301,7 @@ export class UsersService {
                 tempEndDate = new Date(tempEndDate);
                 tempEndDate.setDate(tempEndDate.getDate() + 1);
                 tempEndDate = await this.formatDateUTC(tempEndDate);
-                // lastArchiveEndDate = tempEndDate;
                 basicStartDate = tempEndDate;
-                // basicStartDate.setDate(basicStartDate.getDate() + 1);
-                // basicStartDate = new Date(tempEndDate);
-                // basicStartDate = await this.formatDateUTC(basicStartDate);
-                console.log(lastArchiveEndDate, basicStartDate, "---lastArchiveEndDate, basicStartDate---299");
             } else {
                 const userCreationDate: any = await this.userModel?.sequelize?.query(
                     `SELECT "created_at" as "createdAt" FROM auth.users WHERE "id" = :id`,
@@ -319,7 +314,6 @@ export class UsersService {
                 lastArchiveEndDate = userCreationDate[0]?.createdAt;
                 basicStartDate = new Date(lastArchiveEndDate);
                 basicStartDate.setDate(basicStartDate.getDate() + 1);
-                // basicStartDate = await this.formatDateUTC(basicStartDate);
             }
             if (startDate.length === 0 && endDate.length === 0) {
                 startDate = await this.formatDateLocal(lastArchiveEndDate);

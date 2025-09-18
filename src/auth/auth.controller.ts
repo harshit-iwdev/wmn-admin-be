@@ -19,7 +19,6 @@ export class AuthController {
   @Public()
   @Post('sign-in')
   async signIn(@Body() payload: SigninDto) {
-    console.log(payload, "---payload---22");
     return await this.authService.signin(payload);
   }
 

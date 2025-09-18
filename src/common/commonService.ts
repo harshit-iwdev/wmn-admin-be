@@ -134,7 +134,6 @@ export class CommonHelperService {
         throw new BadRequestException(JSON.stringify(errorData));
       }
 
-      console.log('✅ Event sent to Klaviyo successfully.');
     } catch (err: unknown) {
       console.error('❌ Failed to send event:', err);
     }

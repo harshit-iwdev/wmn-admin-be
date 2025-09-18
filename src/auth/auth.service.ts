@@ -78,7 +78,6 @@ export class AuthService {
   async signin(payload: SigninDto) {
     try {
       const { email, password } = payload;
-console.log(payload, "---payload---81");
       const users = await this.userModel?.sequelize?.query(
         'SELECT * FROM auth.users WHERE email = :email',
         {
@@ -87,13 +86,11 @@ console.log(payload, "---payload---81");
           raw: true,
         }
       );
-      console.log(users, "---users---89");
       const existingUser: any = users && users[0] ? users[0] : null;
   
       if (!existingUser) {
         throw new NotFoundException(RESPONSE_MESSAGES.USER_NOT_FOUND);
       }
-      console.log(existingUser, "---existingUser---96");
       if (existingUser.disabled === true) {
         throw new BadRequestException(RESPONSE_MESSAGES.USER_NOT_VERIFIED);
       }
@@ -102,7 +99,7 @@ console.log(payload, "---payload---81");
         password,
         existingUser.password_hash,
       );
-      console.log(isCorrectPassword, "---isCorrectPassword---105");
+
       if (!isCorrectPassword) {
         throw new BadRequestException(RESPONSE_MESSAGES.INCORRECT_PASSWORD);
       }

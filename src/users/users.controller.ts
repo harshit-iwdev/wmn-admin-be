@@ -96,7 +96,6 @@ export class UsersController {
     @UseGuards(AuthGuard)
     @Post('/create-new-user')
     async createNewUser(@Body() userData: Partial<User>) {
-        console.log(userData, "---userData---");
         return this.usersService.createNewUser(userData);
     }
 

@@ -160,4 +160,21 @@ export class TaskScheduleService {
     // }
 
 
+    async getSpecificUserDataService() {
+        try {
+            const apiKey = this.configService.get('INGEST_API_KEY');
+            // const ingestData = await axios.get(`https://api.encharge.io/v1/people?people[0][email]=jessiemaydwell@gmail.com`, {
+            const ingestData = await axios.get(`https://api.encharge.io/v1/people?people[0][userId]=1e2f889e-4281-4ffc-b7ec-680281433bae`, {
+                headers: {
+                    'X-Encharge-Token': apiKey,
+                    'Content-Type': 'application/json',
+                },
+            });
+            console.log(ingestData, ingestData.data, "---ingestData---172");
+
+            return true;
+        } catch (error) {
+            console.error(error, "---error---174");
+        }
+    }
 }

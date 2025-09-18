@@ -21,9 +21,9 @@ export class TaskScheduleController {
         this.taskScheduleService.updateIngestDataCronService();
     }
 
-    // @Get('update-user-pro-cycle-data')
-    // updateUserProCycleData() {
-    //     this.taskScheduleService.updateUserProCycleData();
+    // @Get('get-specific-user-data')
+    // async getSpecificUserData() {
+    //     return await this.taskScheduleService.getSpecificUserDataService();
     // }
 
 }

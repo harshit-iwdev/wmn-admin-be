@@ -380,12 +380,6 @@ export class UsersService {
             const totalReviewCount = reviewIdsArr.length;
 
             if (reviewIdsArr.length > 0) {
-                // let executeFoodLogsQuery = `SELECT DATE(FL."created_at") AS log_date, jsonb_agg(to_jsonb(FL."food_groups")) AS "foodLogs",
-                //     jsonb_agg(to_jsonb(AIFR)) AS "aiFoodRecognition" FROM public.food_logs AS FL
-                //     LEFT JOIN public.ai_food_recognition AS AIFR ON FL."ai_food_data_id" = AIFR.id
-                //     WHERE FL."userId" = :id AND FL."id" IN (:foodLogsIdsArr)
-                //     GROUP BY DATE(FL."created_at") ORDER BY log_date ASC;`;
-
                 let executeFoodLogsQuery = `SELECT DATE("FL"."created_at") AS log_date,
                     "RFL"."review_id", "R"."created_at" as "review_created_at", "R"."review_date" as "review_date", jsonb_agg(to_jsonb("FL"."food_groups")) AS "foodLogs",
                     jsonb_agg(to_jsonb("AIFR")) AS "aiFoodRecognition" FROM public.food_logs AS "FL"

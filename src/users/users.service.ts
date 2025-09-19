@@ -470,7 +470,7 @@ export class UsersService {
                 foodLogs.forEach((log: any) => {
                     if (log.foodLogs && log.foodLogs.length > 0) {
                         const oneGroup = log.foodLogs.flat();
-                        let grp = oneGroup.filter((group: string) => group && group.toLowerCase());
+                        let grp = oneGroup.map((group: string) => group && group.toLowerCase());
                         grp.forEach((g: string) => {
                             if (g === 'f') foodGroupCounts.fruit++
                             else if (g === 'v') foodGroupCounts.vegetable++

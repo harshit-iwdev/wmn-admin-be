@@ -849,12 +849,18 @@ export class UsersService {
                 `SELECT COUNT(id) AS "newCustomerCount" FROM auth.users
                 WHERE created_at >= NOW() - INTERVAL '28 days'`);
 
+            const newPractitionerCount: any = await this.userModel?.sequelize?.query(
+                `SELECT COUNT(id) AS "newPractitionerCount" FROM auth.users as U
+                JOIN public.metadata as M ON U.id = M.user_id
+                WHERE M."user_type" = 'practitioner' AND U.created_at >= NOW() - INTERVAL '28 days'`);
+
             return {
                 success: true, data: {
                     proUserCount: proUserCount[0][0]?.proUserCount || 0,
                     activeUserCount: activeUserCount[0][0]?.activeUserCount || 0,
                     onboardedUserCount: onboardedUserCount[0][0]?.onboardedUserCount || 0,
-                    newCustomerCount: newCustomerCount[0][0]?.newCustomerCount || 0
+                    newCustomerCount: newCustomerCount[0][0]?.newCustomerCount || 0,
+                    newPractitionerCount: newPractitionerCount[0][0]?.newPractitionerCount || 0
                 }, message: 'Pro user count fetched successfully'
             };
         } catch (error) {

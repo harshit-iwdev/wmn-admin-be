@@ -312,12 +312,16 @@ export class UsersService {
                     }
                 );
                 lastArchiveEndDate = userCreationDate[0]?.createdAt;
-                basicStartDate = new Date(lastArchiveEndDate);
+                basicStartDate = lastArchiveEndDate;
+                // basicStartDate = new Date(lastArchiveEndDate);
                 basicStartDate.setDate(basicStartDate.getDate() + 1);
             }
             if (startDate.length === 0 && endDate.length === 0) {
-                startDate = await this.formatDateLocal(lastArchiveEndDate);
-                endDate = await this.formatDateLocal(new Date());
+                // startDate = await this.formatDateLocal(lastArchiveEndDate);
+                // endDate = await this.formatDateLocal(new Date());
+
+                startDate = lastArchiveEndDate;
+                endDate = new Date().toISOString();
             }
 
             let executeReviewFoodLogsQuery = `Select "R"."id", "R"."user_id", "RFL"."food_log_id" from public.reviews as "R"
@@ -406,6 +410,21 @@ export class UsersService {
                 );
 
                 const foodLogs = await this.mergeFoodLogs(allFoodLogs);
+
+                let foodLogsIdsArrAvgCountQuery = `SELECT COUNT(id) as "count" FROM public.food_logs
+                    WHERE "userId" = :id and "id" IN (:foodLogsIdsArr) and "food_type" NOT IN ('Other', '')`;
+                const foodLogsIdsArrAvgCount: any = await this.userModel?.sequelize?.query(
+                    foodLogsIdsArrAvgCountQuery,
+                    {
+                        type: QueryTypes.SELECT,
+                        raw: true,
+                        replacements: {
+                            id: id,
+                            foodLogsIdsArr: foodLogsIdsArr
+                        },
+                    }
+                );
+
                 let executeAiFoodLogsQuery = `SELECT * FROM public.ai_food_recognition 
                     WHERE "userId" = :id AND "createdAt" >= :startDate AND "createdAt" <= :endDate`;
 
@@ -519,8 +538,8 @@ export class UsersService {
                     }
                 );
 
-                // const avgFoodLogCountPerDay = (foodLogsIdsArr.length / totalReviewCount).toFixed(1);
-                const avgFoodLogCountPerDay = Math.round(foodLogsIdsArr.length / totalReviewCount);
+                const avgFoodLogCountPerDay = (foodLogsIdsArrAvgCount[0]?.count / totalReviewCount).toFixed(1);
+                // const avgFoodLogCountPerDay = Math.round(foodLogsIdsArr.length / totalReviewCount);
 
                 let dataToDisplay = false;
                 if (parseInt(foodLogsCount[0]?.count) > 0) {

@@ -74,6 +74,14 @@ export class UsersController {
     }
 
     @UseGuards(AuthGuard)
+    @Get('/workbook/:id')
+    async fetchUserWorkbook(
+        @Param('id') id: string
+    ) {
+        return this.usersService.fetchUserWorkbook(id);
+    }
+
+    @UseGuards(AuthGuard)
     @Get('/reviews/:id/:pageNumber/:pageSize')
     async fetchUserReviews(
         @Param('id') id: string,

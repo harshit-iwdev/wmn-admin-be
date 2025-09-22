@@ -314,7 +314,7 @@ export class UsersService {
                 lastArchiveEndDate = userCreationDate[0]?.createdAt;
                 basicStartDate = lastArchiveEndDate;
                 // basicStartDate = new Date(lastArchiveEndDate);
-                basicStartDate.setDate(basicStartDate.getDate() + 1);
+                basicStartDate.setDate(basicStartDate.getDate());
             }
             if (startDate.length === 0 && endDate.length === 0) {
                 // startDate = await this.formatDateLocal(lastArchiveEndDate);
@@ -783,6 +783,191 @@ export class UsersService {
             };
         }
         catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
+    async fetchUserWorkbook(id: string): Promise<any> {
+        try {
+            let workbookResponseData: any = {
+                onboardingGoals: {
+                    whyNow: '',
+                    whyHere: ''
+                },
+                pinnedItems: {
+                    gems: [],
+                    links: []
+                },
+                assignmentQuestions: [],
+                reassessList: [] as any,
+                supplementsList: [] as any,
+                adherenceList: [] as any
+            }
+
+            let executeUserMetadataQuery = `SELECT * FROM public.metadata WHERE "user_id" = :id`;
+            const userMetadata: any = await this.userModel?.sequelize?.query(
+                executeUserMetadataQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id },
+                }
+            );
+            let userCurrCycle = userMetadata[0].cycle;
+
+            let executeCheckQuery = `SELECT pq.id AS "program_question_id", pq."program_day", q.id AS "question_id", q."category" AS "category",
+                q."content" AS "content", q."slug" AS "slug", q."data" AS "data", q."field_type" AS "field_type",
+                a."id" AS "answer_id", a."uid" AS "uid", a."values" AS "values",  a."question_slug" AS "question_slug"
+                FROM public."program_questions" pq
+                JOIN public."questions" q ON q."slug" = pq."question_slug"
+                LEFT JOIN public."answers" a ON a."question_slug" = q."slug" AND a."user_id" = :userId
+                -- AND a.uid = :uid
+                WHERE pq."program_day" <= :programDay
+                ORDER BY pq."order" ASC;`
+            const checkData: any = await this.userModel?.sequelize?.query(
+                executeCheckQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { userId: id, programDay: 1 },
+                }
+            );
+            workbookResponseData.assignmentQuestions = checkData;
+
+            let executeOnboardingGoalsQuery = `SELECT * FROM public.answers WHERE "user_id" = :id
+            AND question_slug in ('onboarding-goals-why-now', 'onboarding-goals-why-here')`;
+
+            const onboardingGoals: any = await this.userModel?.sequelize?.query(
+                executeOnboardingGoalsQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id },
+                }
+            );
+
+            onboardingGoals.map((dt: any) => {
+                if (dt.question_slug === 'onboarding-goals-why-here') {
+                    workbookResponseData.onboardingGoals.whyHere = dt.values
+                }
+                if (dt.question_slug === 'onboarding-goals-why-now') {
+                    workbookResponseData.onboardingGoals.whyNow = dt.values
+                }
+            })
+
+            let executePinnedGemsQuery = `SELECT jsonb_agg(to_jsonb("PG")) FILTER (WHERE "PG".id IS NOT NULL) AS "gems",
+                jsonb_agg(to_jsonb("PL")) FILTER (WHERE "PL".id IS NOT NULL) AS "links"
+                FROM public.pins AS "P" LEFT JOIN public.program_gems AS "PG" 
+                ON "PG"."id" = "P"."target_id" AND "P"."pin_type" = 'gem'
+                LEFT JOIN public.program_links AS "PL" 
+                ON "PL"."id" = "P"."target_id" AND "P"."pin_type" = 'link'
+                WHERE "user_id" = :id AND pin_type in ('gem', 'link')`;
+
+            const pinnedGems: any = await this.userModel?.sequelize?.query(
+                executePinnedGemsQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id },
+                }
+            );
+
+            workbookResponseData.pinnedItems = {
+                gems: pinnedGems[0].gems,
+                links: pinnedGems[0].links
+            }
+
+            // let executeSurveyListQuery = `SELECT * FROM public.survey_list_status
+            // WHERE "user_id" = :id AND survey_list_slug in ('intake-list', 'personal-list', 'adherence-list', 'reassess-list')`;
+
+            // const surveyListData: any = await this.userModel?.sequelize?.query(
+            //     executeSurveyListQuery,
+            //     {
+            //         type: QueryTypes.SELECT,
+            //         raw: true,
+            //         replacements: { id: id },
+            //     }
+            // );
+
+            let executeReassessListQuery = `SELECT json_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id") as "reassessObj"
+                FROM public.answers AS "A"
+                LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
+                WHERE "A"."user_id" = :id AND "A"."question_slug" ilike 'reassess%' AND "A"."uid" = :uid
+                ORDER BY "A"."uid" DESC`;
+
+            const reassessList: any = await this.userModel?.sequelize?.query(
+                executeReassessListQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id, uid: 'cycle-' + userCurrCycle },
+                }
+            );
+            let tempReassessList: any = [];
+            for (let i = 0; i < reassessList.length; i++) {
+                const element = reassessList[i];
+                if (element.reassessObj) {
+                    tempReassessList.push({ ...element.reassessObj });
+                }
+            }
+            workbookResponseData['reassessList'] = [ ...tempReassessList ];
+
+            let executeIntakeListQuery = `SELECT json_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id") as "intakeObj"
+                FROM public.answers AS "A"
+                LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
+                WHERE "A"."user_id" = :id AND "A"."question_slug" ilike 'intake%' AND "A"."uid" = :uid
+                ORDER BY "A"."uid" DESC`;
+
+            const intakeList: any = await this.userModel?.sequelize?.query(
+                executeIntakeListQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id, uid: 'cycle-' + userCurrCycle },
+                }
+            );
+            let tempIntakeList: any = [];
+            for (let i = 0; i < intakeList.length; i++) {
+                const element = intakeList[i];
+                if (element.intakeObj) {
+                    tempIntakeList.push({ ...element.intakeObj });
+                }
+            }
+            workbookResponseData['supplementsList'] = [ ...tempIntakeList ];
+
+            let executeAdherenceListQuery = `SELECT json_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id") as "intakeObj"
+                FROM public.answers AS "A"
+                LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
+                WHERE "A"."user_id" = :id AND "A"."question_slug" ilike 'adherence%' AND "A"."uid" = :uid
+                ORDER BY "A"."uid" DESC`;
+
+            const adherenceList: any = await this.userModel?.sequelize?.query(
+                executeAdherenceListQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id, uid: 'cycle-' + userCurrCycle },
+                }
+            );
+            
+            adherenceList.map((dt: any) => {
+                if (dt.intakeObj) {
+                    workbookResponseData.adherenceList.push({ ...dt.intakeObj });
+                }
+            })
+
+            // let tempAdherenceList: any = [];
+            // for (let i = 0; i < adherenceList.length; i++) {
+            //     const element = adherenceList[i];
+            //     if (element.intakeObj) {
+            //         workbookResponseData['adherenceList'].push({ ...element.intakeObj });
+            //     }
+            // }
+            // workbookResponseData['adherenceList'] = [ ...tempAdherenceList ];
+
+            return { success: true, data: workbookResponseData, message: 'User workbook fetched successfully' };
+        } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);
         }

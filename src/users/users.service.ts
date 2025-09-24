@@ -797,7 +797,9 @@ export class UsersService {
                 cycle: 0,
                 onboardingGoals: {
                     whyNow: '',
-                    whyHere: ''
+                    whyHere: '',
+                    practitionerType: '',
+                    practitionerUse: ''
                 },
                 pinnedItems: {
                     gems: [],
@@ -824,7 +826,7 @@ export class UsersService {
             workbookResponseData.cycle = parseInt(userCurrCycle);
 
             let executeOnboardingGoalsQuery = `SELECT * FROM public.answers WHERE "user_id" = :id
-            AND question_slug in ('onboarding-goals-why-now', 'onboarding-goals-why-here')`;
+            AND question_slug in ('onboarding-goals-why-now', 'onboarding-goals-why-here', 'onboarding-practitioner-type', 'onboarding-practitioner-use')`;
 
             const onboardingGoals: any = await this.userModel?.sequelize?.query(
                 executeOnboardingGoalsQuery,
@@ -840,6 +842,12 @@ export class UsersService {
                 }
                 if (dt.question_slug === 'onboarding-goals-why-now') {
                     workbookResponseData.onboardingGoals.whyNow = dt.values
+                }
+                if (dt.question_slug === 'onboarding-practitioner-type') {
+                    workbookResponseData.onboardingGoals.practitionerType = dt.values
+                }
+                if (dt.question_slug === 'onboarding-practitioner-use') {
+                    workbookResponseData.onboardingGoals.practitionerUse = dt.values
                 }
             })
 
@@ -921,7 +929,7 @@ export class UsersService {
             let executeReassessListQuery = `SELECT json_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id") as "reassessObj"
                 FROM public.answers AS "A"
                 LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
-                WHERE "A"."user_id" = :id AND "A"."question_slug" ilike 'reassess%' AND "A"."uid" = :uid
+                WHERE "A"."user_id" = :id AND "A"."question_slug" ilike 'reassess-09%' AND "A"."uid" = :uid
                 ORDER BY "A"."uid" DESC`;
 
             const reassessList: any = await this.userModel?.sequelize?.query(
@@ -934,7 +942,10 @@ export class UsersService {
             );
             reassessList.map((dt: any) => {
                 if (dt.reassessObj) {
-                    workbookResponseData['reassessList'].push({ ...dt.reassessObj });
+                    workbookResponseData['reassessList'].push({
+                        ...dt.reassessObj,
+                        quesContent: dt.reassessObj.quesContent.replace(/\\n/g, " "),
+                    });
                 }
             })
 

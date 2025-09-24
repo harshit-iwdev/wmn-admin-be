@@ -499,6 +499,8 @@ export class UsersService {
                         const hasAllGroups = foodGroupsOrder.every(g => uniqueFoodGroups.includes(g));
                         if (hasAllGroups) {
                             consecutive++;
+                        } else {
+                            consecutive = 0;
                         }
                     }
                 });

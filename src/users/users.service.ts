@@ -621,16 +621,16 @@ export class UsersService {
             const offset = (pageNumber - 1) * pageSize;
 
             const executeFoodLogJournalQuery = `SELECT jsonb_build_object('id', R.id, 'user_id', R."user_id", 'review_date', R."review_date",
-            'whatWentWell', R."whatWentWell", 'whatCouldBeBetter', R."whatCouldBeBetter",
-            'correctiveMeasures', R."correctiveMeasures", 'thoughts', R."thoughts", 'created_at', R."created_at",
-            'foodLogs', COALESCE(jsonb_agg(to_jsonb(FL) ORDER BY FL."created_at" DESC) FILTER (WHERE FL.id IS NOT NULL), '[]'::jsonb),
-            'foodLogsCount', COUNT(FL.id)) AS review FROM public.reviews AS R
-            LEFT JOIN public.review_food_logs AS RFL ON R.id = RFL."review_id"
-            LEFT JOIN public.food_logs AS FL ON FL.id = RFL."food_log_id"
-            WHERE R."user_id" = :id
-            GROUP BY R.id, R."user_id", R."whatWentWell", R."whatCouldBeBetter", 
-            R."correctiveMeasures", R."thoughts", R."created_at"
-            ORDER BY Date(R."review_date") DESC LIMIT :pageSize OFFSET :offset`;
+                'whatWentWell', R."whatWentWell", 'whatCouldBeBetter', R."whatCouldBeBetter",
+                'correctiveMeasures', R."correctiveMeasures", 'thoughts', R."thoughts", 'created_at', R."created_at",
+                'foodLogs', COALESCE(jsonb_agg(to_jsonb(FL) ORDER BY FL."created_at" DESC) FILTER (WHERE FL.id IS NOT NULL), '[]'::jsonb),
+                'foodLogsCount', COUNT(FL.id)) AS review FROM public.reviews AS R
+                LEFT JOIN public.review_food_logs AS RFL ON R.id = RFL."review_id"
+                LEFT JOIN public.food_logs AS FL ON FL.id = RFL."food_log_id"
+                WHERE R."user_id" = :id
+                GROUP BY R.id, R."user_id", R."whatWentWell", R."whatCouldBeBetter", 
+                R."correctiveMeasures", R."thoughts", R."created_at"
+                ORDER BY Date(R."review_date") DESC LIMIT :pageSize OFFSET :offset`;
             let foodLogJournal: any = await this.userModel?.sequelize?.query(
                 executeFoodLogJournalQuery,
                 {
@@ -793,23 +793,15 @@ export class UsersService {
     async fetchUserWorkbook(id: string): Promise<any> {
         try {
             let workbookResponseData: any = {
+                userType: '',
                 module: 0,
                 cycle: 0,
-                onboardingGoals: {
-                    whyNow: '',
-                    whyHere: '',
-                    practitionerType: '',
-                    practitionerUse: ''
-                },
-                pinnedItems: {
-                    gems: [],
-                    links: []
-                },
-                assignmentQuestions: [],
-                reassessList: [] as any,
+                onboardingGoals: [] as any,
+                reassessScreeners: {},
                 supplementsList: [] as any,
                 adherenceList: [] as any,
-                personalInfo: [] as any
+                personalInfo: [] as any,
+                mentalScreeners: {},
             }
 
             let executeUserMetadataQuery = `SELECT * FROM public.metadata WHERE "user_id" = :id`;
@@ -822,43 +814,49 @@ export class UsersService {
                 }
             );
             let userCurrCycle = userMetadata[0].cycle;
+            workbookResponseData.userType = userMetadata[0].user_type;
             workbookResponseData.module = parseInt(userMetadata[0].pro_day);
             workbookResponseData.cycle = parseInt(userCurrCycle);
 
-            let executeOnboardingGoalsQuery = `SELECT * FROM public.answers WHERE "user_id" = :id
-            AND question_slug in ('onboarding-goals-why-now', 'onboarding-goals-why-here', 'onboarding-practitioner-type', 'onboarding-practitioner-use')`;
-
-            const onboardingGoals: any = await this.userModel?.sequelize?.query(
+            let onboardingGoalSlugArr: string[] = [];
+            if (userMetadata[0].user_type === 'practitioner') {
+                onboardingGoalSlugArr.push('onboarding-practitioner-type', 'onboarding-practitioner-use', 'personal-14-health-cooking', 'personal-15-health-meditation');
+            } else if (userMetadata[0].user_type === 'patient') {
+                onboardingGoalSlugArr.push('onboarding-goals-why-now', 'onboarding-goals-why-here', 'personal-13-health-body', 'intake-08-ed-13-extra', 'personal-12-health-food', 'intake-03-anxiety-09-extra', 'personal-14-health-cooking', 'personal-15-health-meditation', 'personal-16-health-sleep-hours', 'personal-17-health-sleep-qual');
+            }
+            let executeOnboardingGoalsQuery = `SELECT "A"."values", "Q"."content" as "question_content", "Q"."slug" as "question_slug", "Q"."data" as "quesData" FROM public.answers as "A"
+                JOIN public.questions as "Q" ON "Q"."slug" = "A"."question_slug"
+                WHERE "user_id" = :id AND "A"."uid" = 'cycle-0' AND "A"."question_slug" in (:onboardingGoalSlugArr)`;
+            const onboardingGoalsData: any = await this.userModel?.sequelize?.query(
                 executeOnboardingGoalsQuery,
                 {
                     type: QueryTypes.SELECT,
                     raw: true,
-                    replacements: { id: id },
+                    replacements: { id: id, onboardingGoalSlugArr: onboardingGoalSlugArr },
                 }
             );
-            onboardingGoals.map((dt: any) => {
-                if (dt.question_slug === 'onboarding-goals-why-here') {
-                    workbookResponseData.onboardingGoals.whyHere = dt.values
+            onboardingGoalsData.map((dt: any) => {
+                let ansValue = '';
+                if (dt.quesData.render && dt.quesData.render.length > 0) {
+                    ansValue = dt.quesData.render[parseInt(dt.values)]
+                } else if (dt.quesData.choices && dt.quesData.choices.length > 0) {
+                    ansValue = dt.values
                 }
-                if (dt.question_slug === 'onboarding-goals-why-now') {
-                    workbookResponseData.onboardingGoals.whyNow = dt.values
-                }
-                if (dt.question_slug === 'onboarding-practitioner-type') {
-                    workbookResponseData.onboardingGoals.practitionerType = dt.values
-                }
-                if (dt.question_slug === 'onboarding-practitioner-use') {
-                    workbookResponseData.onboardingGoals.practitionerUse = dt.values
-                }
+                workbookResponseData.onboardingGoals.push({
+                    quesContent: dt.question_content,
+                    ansValue: ansValue
+                })
             })
 
-            let executeCheckQuery = `SELECT pq."program_day",
+            let executeCheckQuery = `SELECT pq."program_day", pm."title" as "moduleName",
                 json_agg(json_build_object('program_question_id', pq.id, 'program_day', pq."program_day", 'question_id', q.id, 'category', q."category", 'content', q."content", 'slug', q."slug", 'data', q."data", 'field_type', q."field_type", 'answer_id', a.id, 'uid', a.uid, 'values', a.values, 'question_slug', a.question_slug)) AS questions
                 FROM public."program_questions" pq
                 JOIN public."questions" q ON q.slug = pq.question_slug
                 LEFT JOIN public."answers" a ON a.question_slug = q.slug AND a.user_id = :userId AND a.uid = :uid
+                LEFT JOIN public."programs" pm ON pm.day = pq.program_day
                 WHERE pq.program_day <= :programDay AND (a.question_slug ILIKE 'program-%' OR a.question_slug IS NULL)
-                GROUP BY pq."program_day" ORDER BY pq."program_day" DESC;`
-            const checkData: any = await this.userModel?.sequelize?.query(
+                GROUP BY pq."program_day", pm."title" ORDER BY pq."program_day" DESC;`
+            const assignmentQuestionsData: any = await this.userModel?.sequelize?.query(
                 executeCheckQuery,
                 {
                     type: QueryTypes.SELECT,
@@ -866,7 +864,6 @@ export class UsersService {
                     replacements: { userId: id, programDay: workbookResponseData.module, uid: 'cycle-' + userCurrCycle },
                 }
             );
-            workbookResponseData.assignmentQuestions = checkData;
 
             let executePinnedGemsQuery = `SELECT "P"."pinned_at", "P"."cycle",
                 jsonb_agg(to_jsonb("PG")) FILTER (WHERE "PG".id IS NOT NULL AND "PG"."program_day" <= :programDay) AS "gems",
@@ -877,7 +874,7 @@ export class UsersService {
                 WHERE "P"."user_id" = :id AND "P".pin_type in ('gem', 'link') AND "P"."cycle" = :cycle
                 GROUP BY "P"."pinned_at", "P"."cycle" ORDER BY "P"."pinned_at" DESC;`
 
-            const pinnedGems: any = await this.userModel?.sequelize?.query(
+            const pinnedItemsData: any = await this.userModel?.sequelize?.query(
                 executePinnedGemsQuery,
                 {
                     type: QueryTypes.SELECT,
@@ -885,14 +882,14 @@ export class UsersService {
                     replacements: { id: id, cycle: parseInt(userCurrCycle), programDay: workbookResponseData.module },
                 }
             );
-            workbookResponseData.pinnedItems = {
-                gems: pinnedGems.filter((item: any) => item.gems).map((item: any) => item.gems).flat() || [],
-                links: pinnedGems.filter((item: any) => item.links).map((item: any) => item.links).flat() || []
+            const pinnedItems = {
+                gems: pinnedItemsData.filter((item: any) => item.gems).map((item: any) => item.gems).flat() || [],
+                links: pinnedItemsData.filter((item: any) => item.links).map((item: any) => item.links).flat() || []
             }
 
             let assignmentsData : any[] = [];
-            for (let i = 0; i < workbookResponseData.assignmentQuestions.length; i++) {
-                const element = workbookResponseData.assignmentQuestions[i];
+            for (let i = 0; i < assignmentQuestionsData.length; i++) {
+                const element = assignmentQuestionsData[i];
 
                 assignmentsData.push({
                     ...element,
@@ -901,13 +898,13 @@ export class UsersService {
                     links: []
                 })
 
-                workbookResponseData.pinnedItems.gems.forEach((gem: any) => {
+                pinnedItems.gems.forEach((gem: any) => {
                     if (gem.program_day === parseInt(element.program_day)) {
                         assignmentsData[i]['gems'].push(gem)
                     }
                 })
 
-                workbookResponseData.pinnedItems.links.forEach((link: any) => {
+                pinnedItems.links.forEach((link: any) => {
                     if (link.program_day === parseInt(element.program_day)) {
                         assignmentsData[i]['links'].push(link)
                     }
@@ -915,39 +912,133 @@ export class UsersService {
             }
             workbookResponseData['assignmentData'] = assignmentsData;
 
-            // let executeSurveyListQuery = `SELECT * FROM public.survey_list_status
-            // WHERE "user_id" = :id AND survey_list_slug in ('intake-list', 'personal-list', 'adherence-list', 'reassess-list')`;
-            // const surveyListData: any = await this.userModel?.sequelize?.query(
-            //     executeSurveyListQuery,
-            //     {
-            //         type: QueryTypes.SELECT,
-            //         raw: true,
-            //         replacements: { id: id },
-            //     }
-            // );
+            // let executeMentalScreenerQuery = `Select "SL"."slug", -- "SS".*, "SLS".*, "SQ".*, "SLS".*, "SS".*, 
+            //     "Q"."content" as "quesContent", "A"."user_id" as "userId", "A"."uid" as "cycle", "A"."values" as "ansValues"
+            //     from public."survey_list" AS "SL"
+            //     Join public."survey_list_surveys" AS "SLS" ON "SLS"."survey_list_slug" = "SL"."slug"
+            //     Join public."survey_status" AS "SS" ON "SS"."survey_slug" = "SLS"."survey_slug"
+            //     Join public."survey_questions" AS "SQ" ON "SQ"."survey_slug" = "SLS"."survey_slug"
+            //     Join public."questions" AS "Q" ON "Q"."slug" = "SQ"."question_slug"
+            //     Join public."answers" AS "A" ON "A"."question_slug" = "Q"."slug"
+            //     where "A"."user_id" = :id and "SL"."slug" = 'intake-list' and "A"."uid" = :uid`;
 
-            let executeReassessListQuery = `SELECT json_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id") as "reassessObj"
-                FROM public.answers AS "A"
-                LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
-                WHERE "A"."user_id" = :id AND "A"."question_slug" ilike 'reassess-09%' AND "A"."uid" = :uid
-                ORDER BY "A"."uid" DESC`;
-
-            const reassessList: any = await this.userModel?.sequelize?.query(
-                executeReassessListQuery,
+            let executeMentalScreenerQuery = `SELECT
+    sl.id,
+    sl.title,
+    sl.slug,
+    json_agg(
+        json_build_object(
+            'survey', json_build_object(
+                'id', s.id,
+                'title', s.title,
+                'slug', s.slug,
+                'survey_status', COALESCE(ss_data.status, '[]'::json),
+                'survey_questions', COALESCE(sq_data.questions, '[]'::json)
+            )
+        ) ORDER BY sls."order" ASC
+    ) as "survey_list_surveys"
+FROM public.survey_list sl
+LEFT JOIN public.survey_list_surveys sls ON sl.slug = sls.survey_list_slug
+LEFT JOIN public.surveys s ON sls.survey_slug = s.slug
+LEFT JOIN LATERAL (
+    SELECT json_agg(
+        json_build_object(
+            'survey_slug', ss.survey_slug,
+            'uid', ss.uid,
+            'status', ss.status
+        )
+    ) as status
+    FROM survey_status ss
+    WHERE ss.survey_slug = s.slug AND ss.uid = :uid
+) ss_data ON true
+LEFT JOIN LATERAL (
+    SELECT json_agg(
+        json_build_object(
+            'id', sq.id,
+            'order', sq."order",
+            'question', json_build_object(
+                'id', q.id,
+                'slug', q.slug,
+                'content', q.content,
+                'category', q.category,
+                'field_type', q.field_type,
+                'data', q.data,
+                'answers', COALESCE(a_data.answers, '[]'::json)
+            )
+        ) ORDER BY sq."order" ASC
+    ) as questions
+    FROM survey_questions sq
+    JOIN questions q ON sq.question_slug = q.slug
+    LEFT JOIN LATERAL (
+        SELECT json_agg(
+            json_build_object(
+                'id', a.id,
+                'values', a.values,
+                'uid', a.uid,
+                'question_slug', a.question_slug
+            )
+        ) as answers
+        FROM answers a
+        WHERE a.question_slug = q.slug
+        AND a.user_id = :id
+        AND a.uid = :uid
+    ) a_data ON true
+    WHERE sq.survey_slug = s.slug
+) sq_data ON true
+WHERE sl.slug = :surveySlug
+GROUP BY sl.id, sl.title, sl.slug;`;
+            const mentalScreener: any = await this.userModel?.sequelize?.query(
+                executeMentalScreenerQuery,
                 {
                     type: QueryTypes.SELECT,
                     raw: true,
-                    replacements: { id: id, uid: 'cycle-' + userCurrCycle },
+                    replacements: { id: id, uid: 'cycle-0', surveySlug: 'intake-list' },
                 }
             );
-            reassessList.map((dt: any) => {
-                if (dt.reassessObj) {
-                    workbookResponseData['reassessList'].push({
-                        ...dt.reassessObj,
-                        quesContent: dt.reassessObj.quesContent.replace(/\\n/g, " "),
-                    });
+
+            const intakeScreenerData = {};
+            for (let i = 0; i < mentalScreener[0].survey_list_surveys.length; i++) {
+                const element = mentalScreener[0].survey_list_surveys[i];
+                intakeScreenerData['page-' + (i+1)] = {
+                    title: element.survey.title,
+                    slug: element.survey.slug,
+                    survey_questions: element.survey.survey_questions.map((dt: any) => {
+                        return {
+                            question: dt.question.content,
+                            renderData: dt.question.data,
+                            answer: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].values : '',
+                            question_slug: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].question_slug : '',
+                        }
+                    }),
                 }
-            })
+            }
+            workbookResponseData['mentalScreeners'] = intakeScreenerData;
+
+            const reassessList: any = await this.userModel?.sequelize?.query(
+                executeMentalScreenerQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id, uid: 'cycle-0', surveySlug: 'reassess-list' },
+                }
+            );
+            const reassessScreenerData = {};
+            for (let i = 0; i < reassessList[0].survey_list_surveys.length; i++) {
+                const element = reassessList[0].survey_list_surveys[i];
+                reassessScreenerData['page-' + (i+1)] = {
+                    title: element.survey.title,
+                    slug: element.survey.slug,
+                    survey_questions: element.survey.survey_questions.map((dt: any) => {
+                        return {
+                            question: dt.question.content,
+                            renderData: dt.question.data,
+                            answer: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].values : '',
+                            question_slug: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].question_slug : '',
+                        }
+                    }),
+                }
+            }
+            workbookResponseData['reassessScreeners'] = reassessScreenerData;
 
             let personalInfoSlugArr = ['personal-06-demo-continent', 'personal-01-demo-age', 'personal-07-demo-city', 'personal-02-demo-gender', 'personal-04-demo-edu', 'personal-03-demo-ethnicity', 'personal-05-demo-par-edu', 'personal-08-anthro-weight', 'personal-09-anthro-weight-high', 'personal-11-anthro-weight-freq', 'personal-10-anthro-weight-low', 'personal-08-anthro-height'];
             let executePersonalInfoQuery = `SELECT json_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id") as "personalInfoObj"
@@ -1024,6 +1115,7 @@ export class UsersService {
                 }
             })
 
+            // return { success: true, data: intakeScreenerData, message: 'User workbook fetched successfully' };
             return { success: true, data: workbookResponseData, message: 'User workbook fetched successfully' };
         } catch (error) {
             console.error(error, "---error---");

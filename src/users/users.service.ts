@@ -696,7 +696,6 @@ export class UsersService {
                         },
                     }
                 );
-
                 let dailyIntentionsArr: any = [];
                 dailyIntentionsData.map((item: any) => {
                     if (item.question_slug.startsWith('intention-')) {
@@ -796,12 +795,15 @@ export class UsersService {
                 userType: '',
                 module: 0,
                 cycle: 0,
-                onboardingGoals: [] as any,
+                goals: [] as any,
+                onboardingQues: [] as any,
                 reassessScreeners: {},
                 supplementsList: [] as any,
                 adherenceList: [] as any,
                 personalInfo: [] as any,
                 mentalScreeners: {},
+                initialReassessScreeners: {},
+                feedbackData: [] as any,
             }
 
             let executeUserMetadataQuery = `SELECT * FROM public.metadata WHERE "user_id" = :id`;
@@ -814,14 +816,14 @@ export class UsersService {
                 }
             );
             let userCurrCycle = userMetadata[0].cycle;
-            workbookResponseData.userType = userMetadata[0].user_type;
-            workbookResponseData.module = parseInt(userMetadata[0].pro_day);
-            workbookResponseData.cycle = parseInt(userCurrCycle);
+            workbookResponseData.userType = userMetadata[0].user_type || 'patient';
+            workbookResponseData.module = parseInt(userMetadata[0].pro_day) || 0;
+            workbookResponseData.cycle = parseInt(userCurrCycle) || 0;
 
             let onboardingGoalSlugArr: string[] = [];
-            if (userMetadata[0].user_type === 'practitioner') {
+            if (workbookResponseData.userType === 'practitioner') {
                 onboardingGoalSlugArr.push('onboarding-practitioner-type', 'onboarding-practitioner-use', 'personal-14-health-cooking', 'personal-15-health-meditation');
-            } else if (userMetadata[0].user_type === 'patient') {
+            } else if (workbookResponseData.userType === 'patient') {
                 onboardingGoalSlugArr.push('onboarding-goals-why-now', 'onboarding-goals-why-here', 'personal-13-health-body', 'intake-08-ed-13-extra', 'personal-12-health-food', 'intake-03-anxiety-09-extra', 'personal-14-health-cooking', 'personal-15-health-meditation', 'personal-16-health-sleep-hours', 'personal-17-health-sleep-qual');
             }
             let executeOnboardingGoalsQuery = `SELECT "A"."values", "Q"."content" as "question_content", "Q"."slug" as "question_slug", "Q"."data" as "quesData" FROM public.answers as "A"
@@ -842,12 +844,19 @@ export class UsersService {
                 } else if (dt.quesData.choices && dt.quesData.choices.length > 0) {
                     ansValue = dt.values
                 }
-                workbookResponseData.onboardingGoals.push({
-                    quesContent: dt.question_content,
-                    ansValue: ansValue
-                })
+                if (dt.question_slug === 'onboarding-goals-why-now' || dt.question_slug === 'onboarding-goals-why-here') {
+                    workbookResponseData.goals.push({
+                        quesContent: dt.question_content,
+                        ansValue: ansValue
+                    })
+                } else {
+                    workbookResponseData.onboardingQues.push({
+                        quesContent: dt.question_content,
+                        ansValue: ansValue
+                    })
+                }
             })
-
+            
             let executeCheckQuery = `SELECT pq."program_day", pm."title" as "moduleName",
                 json_agg(json_build_object('program_question_id', pq.id, 'program_day', pq."program_day", 'question_id', q.id, 'category', q."category", 'content', q."content", 'slug', q."slug", 'data', q."data", 'field_type', q."field_type", 'answer_id', a.id, 'uid', a.uid, 'values', a.values, 'question_slug', a.question_slug)) AS questions
                 FROM public."program_questions" pq
@@ -912,81 +921,25 @@ export class UsersService {
             }
             workbookResponseData['assignmentData'] = assignmentsData;
 
-            // let executeMentalScreenerQuery = `Select "SL"."slug", -- "SS".*, "SLS".*, "SQ".*, "SLS".*, "SS".*, 
-            //     "Q"."content" as "quesContent", "A"."user_id" as "userId", "A"."uid" as "cycle", "A"."values" as "ansValues"
-            //     from public."survey_list" AS "SL"
-            //     Join public."survey_list_surveys" AS "SLS" ON "SLS"."survey_list_slug" = "SL"."slug"
-            //     Join public."survey_status" AS "SS" ON "SS"."survey_slug" = "SLS"."survey_slug"
-            //     Join public."survey_questions" AS "SQ" ON "SQ"."survey_slug" = "SLS"."survey_slug"
-            //     Join public."questions" AS "Q" ON "Q"."slug" = "SQ"."question_slug"
-            //     Join public."answers" AS "A" ON "A"."question_slug" = "Q"."slug"
-            //     where "A"."user_id" = :id and "SL"."slug" = 'intake-list' and "A"."uid" = :uid`;
-
-            let executeMentalScreenerQuery = `SELECT
-    sl.id,
-    sl.title,
-    sl.slug,
-    json_agg(
-        json_build_object(
-            'survey', json_build_object(
-                'id', s.id,
-                'title', s.title,
-                'slug', s.slug,
-                'survey_status', COALESCE(ss_data.status, '[]'::json),
-                'survey_questions', COALESCE(sq_data.questions, '[]'::json)
-            )
-        ) ORDER BY sls."order" ASC
-    ) as "survey_list_surveys"
-FROM public.survey_list sl
-LEFT JOIN public.survey_list_surveys sls ON sl.slug = sls.survey_list_slug
-LEFT JOIN public.surveys s ON sls.survey_slug = s.slug
-LEFT JOIN LATERAL (
-    SELECT json_agg(
-        json_build_object(
-            'survey_slug', ss.survey_slug,
-            'uid', ss.uid,
-            'status', ss.status
-        )
-    ) as status
-    FROM survey_status ss
-    WHERE ss.survey_slug = s.slug AND ss.uid = :uid
-) ss_data ON true
-LEFT JOIN LATERAL (
-    SELECT json_agg(
-        json_build_object(
-            'id', sq.id,
-            'order', sq."order",
-            'question', json_build_object(
-                'id', q.id,
-                'slug', q.slug,
-                'content', q.content,
-                'category', q.category,
-                'field_type', q.field_type,
-                'data', q.data,
-                'answers', COALESCE(a_data.answers, '[]'::json)
-            )
-        ) ORDER BY sq."order" ASC
-    ) as questions
-    FROM survey_questions sq
-    JOIN questions q ON sq.question_slug = q.slug
-    LEFT JOIN LATERAL (
-        SELECT json_agg(
-            json_build_object(
-                'id', a.id,
-                'values', a.values,
-                'uid', a.uid,
-                'question_slug', a.question_slug
-            )
-        ) as answers
-        FROM answers a
-        WHERE a.question_slug = q.slug
-        AND a.user_id = :id
-        AND a.uid = :uid
-    ) a_data ON true
-    WHERE sq.survey_slug = s.slug
-) sq_data ON true
-WHERE sl.slug = :surveySlug
-GROUP BY sl.id, sl.title, sl.slug;`;
+            let executeMentalScreenerQuery = `SELECT sl.id, sl.title, sl.slug,
+                json_agg(json_build_object('survey', 
+                    json_build_object('id', s.id, 'title', s.title, 'slug', s.slug, 'survey_status', 
+                        COALESCE(ss_data.status, '[]'::json), 'survey_questions', 
+                        COALESCE(sq_data.questions, '[]'::json))) ORDER BY sls."order" ASC) as "survey_list_surveys"
+                FROM public.survey_list sl
+                LEFT JOIN public.survey_list_surveys sls ON sl.slug = sls.survey_list_slug
+                LEFT JOIN public.surveys s ON sls.survey_slug = s.slug
+                LEFT JOIN LATERAL (SELECT json_agg(json_build_object('survey_slug', ss.survey_slug, 'uid', ss.uid, 'status', ss.status)) as status
+                    FROM survey_status ss WHERE ss.survey_slug = s.slug AND ss.uid = :uid) ss_data ON true
+                LEFT JOIN LATERAL (SELECT json_agg(json_build_object('id', sq.id, 'order', sq."order",
+                            'question', json_build_object('id', q.id, 'slug', q.slug, 'content', q.content, 'category', q.category, 'field_type', q.field_type, 'data', q.data, 'answers', COALESCE(a_data.answers, '[]'::json))
+                        ) ORDER BY sq."order" ASC) as questions
+                    FROM survey_questions sq
+                    JOIN questions q ON sq.question_slug = q.slug
+                    LEFT JOIN LATERAL (SELECT json_agg(json_build_object('id', a.id, 'values', a.values, 'uid', a.uid, 'question_slug', a.question_slug)) as answers
+                        FROM answers a WHERE a.question_slug = q.slug AND a.user_id = :id AND a.uid = :uid
+                    ) a_data ON true WHERE sq.survey_slug = s.slug
+                ) sq_data ON true WHERE sl.slug = :surveySlug GROUP BY sl.id, sl.title, sl.slug;`
             const mentalScreener: any = await this.userModel?.sequelize?.query(
                 executeMentalScreenerQuery,
                 {
@@ -1019,13 +972,57 @@ GROUP BY sl.id, sl.title, sl.slug;`;
                 {
                     type: QueryTypes.SELECT,
                     raw: true,
-                    replacements: { id: id, uid: 'cycle-0', surveySlug: 'reassess-list' },
+                    replacements: { id: id, uid: 'cycle-' + userCurrCycle, surveySlug: 'reassess-list' },
                 }
             );
             const reassessScreenerData = {};
             for (let i = 0; i < reassessList[0].survey_list_surveys.length; i++) {
-                const element = reassessList[0].survey_list_surveys[i];
-                reassessScreenerData['page-' + (i+1)] = {
+                if (i === 0) {
+                    const feedbackElement = reassessList[0].survey_list_surveys[i];
+                    const feedbackData = {
+                        title: feedbackElement.survey.title,
+                        slug: feedbackElement.survey.slug,
+                        survey_questions: feedbackElement.survey.survey_questions.map((dt: any) => {
+                            return {
+                                quesContent: dt.question.content,
+                                quesData: dt.question.data,
+                                ansValue: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].values : '',
+                                quesSlug: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].question_slug : '',
+                            }
+                        }),
+                    }
+                    workbookResponseData['feedbackData'] = feedbackData.survey_questions
+                } else {
+                    const element = reassessList[0].survey_list_surveys[i];
+                    reassessScreenerData['page-' + (i)] = {
+                        title: element.survey.title,
+                        slug: element.survey.slug,
+                        survey_questions: element.survey.survey_questions.map((dt: any) => {
+                            return {
+                                question: dt.question.content,
+                                renderData: dt.question.data,
+                                answer: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].values : '',
+                                question_slug: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].question_slug : '',
+                            }
+                        }),
+                    }
+                }
+
+            }
+            workbookResponseData['reassessScreeners'] = reassessScreenerData;
+
+            const initialReassessList: any = await this.userModel?.sequelize?.query(
+                executeMentalScreenerQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { id: id, uid: 'cycle-0', surveySlug: 'reassess-list' },
+                }
+            );
+            const initialReassessData = {};
+            for (let i = 1; i < initialReassessList[0].survey_list_surveys.length; i++) {
+                const element = initialReassessList[0].survey_list_surveys[i];
+                initialReassessData['page-' + (i)] = {
                     title: element.survey.title,
                     slug: element.survey.slug,
                     survey_questions: element.survey.survey_questions.map((dt: any) => {
@@ -1038,7 +1035,7 @@ GROUP BY sl.id, sl.title, sl.slug;`;
                     }),
                 }
             }
-            workbookResponseData['reassessScreeners'] = reassessScreenerData;
+            workbookResponseData['initialReassessScreeners'] = initialReassessData;
 
             let personalInfoSlugArr = ['personal-06-demo-continent', 'personal-01-demo-age', 'personal-07-demo-city', 'personal-02-demo-gender', 'personal-04-demo-edu', 'personal-03-demo-ethnicity', 'personal-05-demo-par-edu', 'personal-08-anthro-weight', 'personal-09-anthro-weight-high', 'personal-11-anthro-weight-freq', 'personal-10-anthro-weight-low', 'personal-08-anthro-height'];
             let executePersonalInfoQuery = `SELECT json_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id") as "personalInfoObj"

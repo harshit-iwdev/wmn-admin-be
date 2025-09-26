@@ -682,20 +682,26 @@ export class UsersService {
             for (let i = 0; i < foodLogJournal.length; i++) {
                 const item = foodLogJournal[i];
 
-                let executeDailyIntentionsDataQuery = `SELECT "question_slug" as "question_slug", "values", "uid" FROM public.answers WHERE "user_id" = :id 
-                AND "question_slug" IN (:question_slug) AND uid = :uid`;
-                const dailyIntentionsData: any = await this.userModel?.sequelize?.query(
-                    executeDailyIntentionsDataQuery,
-                    {
-                        type: QueryTypes.SELECT,
-                        raw: true,
-                        replacements: {
-                            id: id,
-                            question_slug: intentionArr,
-                            uid: 'review-' + item.review.review_date
-                        },
+                let dailyIntentionsData: any = [];
+                for (let i = 0; i < intentionArr.length; i++) {
+                    const element = intentionArr[i];
+
+                    let executeIntentionsCheckQuery = `SELECT "question_slug" as "question_slug", "values", "uid", "created_at" FROM public.answers WHERE "user_id" = :id 
+                        AND "question_slug" = :question_slug AND uid = :uid`;
+
+                    const intentionsCheckData: any = await this.userModel?.sequelize?.query(
+                        executeIntentionsCheckQuery,
+                        {
+                            type: QueryTypes.SELECT,
+                            raw: true,
+                            replacements: { id: id, question_slug: element, uid: 'review-' + item.review.review_date },
+                        }
+                    );
+                    if(intentionsCheckData.length > 0) {
+                        dailyIntentionsData.push(intentionsCheckData[0]);
                     }
-                );
+                }
+
                 let dailyIntentionsArr: any = [];
                 dailyIntentionsData.map((item: any) => {
                     if (item.question_slug.startsWith('intention-')) {

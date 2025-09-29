@@ -828,7 +828,7 @@ export class UsersService {
 
             let onboardingGoalSlugArr: string[] = [];
             if (workbookResponseData.userType === 'practitioner') {
-                onboardingGoalSlugArr.push('onboarding-practitioner-type', 'onboarding-practitioner-use', 'personal-14-health-cooking', 'personal-15-health-meditation');
+                onboardingGoalSlugArr.push('onboarding-practitioner-use', 'personal-14-health-cooking', 'personal-15-health-meditation', 'onboarding-practitioner-type');
             } else if (workbookResponseData.userType === 'patient') {
                 onboardingGoalSlugArr.push('onboarding-goals-why-now', 'onboarding-goals-why-here', 'personal-13-health-body', 'intake-08-ed-13-extra', 'personal-12-health-food', 'intake-03-anxiety-09-extra', 'personal-14-health-cooking', 'personal-15-health-meditation', 'personal-16-health-sleep-hours', 'personal-17-health-sleep-qual');
             }
@@ -849,14 +849,22 @@ export class UsersService {
                     ansValue = dt.quesData.render[parseInt(dt.values)]
                 } else if (dt.quesData.choices && dt.quesData.choices.length > 0) {
                     ansValue = dt.values
+                } else if (dt.values && dt.values.length > 0) {
+                    if (dt.quesData.placeholder === '%') {
+                        ansValue = dt.values + '%'
+                    } else {
+                        ansValue = dt.values
+                    }
                 }
                 if (dt.question_slug === 'onboarding-goals-why-now' || dt.question_slug === 'onboarding-goals-why-here') {
                     workbookResponseData.goals.push({
+                        question_slug: dt.question_slug,
                         quesContent: dt.question_content,
                         ansValue: ansValue
                     })
                 } else {
                     workbookResponseData.onboardingQues.push({
+                        question_slug: dt.question_slug,
                         quesContent: dt.question_content,
                         ansValue: ansValue
                     })
@@ -876,7 +884,7 @@ export class UsersService {
                 {
                     type: QueryTypes.SELECT,
                     raw: true,
-                    replacements: { userId: id, programDay: workbookResponseData.module, uid: 'cycle-' + userCurrCycle },
+                    replacements: { userId: id, programDay: workbookResponseData.module, uid: 'cycle-' + parseInt(userCurrCycle) },
                 }
             );
 
@@ -942,7 +950,7 @@ export class UsersService {
                         ) ORDER BY sq."order" ASC) as questions
                     FROM survey_questions sq
                     JOIN questions q ON sq.question_slug = q.slug
-                    LEFT JOIN LATERAL (SELECT json_agg(json_build_object('id', a.id, 'values', a.values, 'uid', a.uid, 'question_slug', a.question_slug)) as answers
+                    LEFT JOIN LATERAL (SELECT json_agg(json_build_object('id', a.id, 'values', a.values, 'uid', a.uid, 'question_slug', a.question_slug, 'answer_date', a.created_at)) as answers
                         FROM answers a WHERE a.question_slug = q.slug AND a.user_id = :id AND a.uid = :uid
                     ) a_data ON true WHERE sq.survey_slug = s.slug
                 ) sq_data ON true WHERE sl.slug = :surveySlug GROUP BY sl.id, sl.title, sl.slug;`
@@ -967,6 +975,7 @@ export class UsersService {
                             renderData: dt.question.data,
                             answer: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].values : '',
                             question_slug: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].question_slug : '',
+                            answer_date: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].answer_date : '',
                         }
                     }),
                 }
@@ -978,7 +987,7 @@ export class UsersService {
                 {
                     type: QueryTypes.SELECT,
                     raw: true,
-                    replacements: { id: id, uid: 'cycle-' + userCurrCycle, surveySlug: 'reassess-list' },
+                    replacements: { id: id, uid: 'cycle-' + parseInt(userCurrCycle), surveySlug: 'reassess-list' },
                 }
             );
             const reassessScreenerData = {};
@@ -1013,7 +1022,6 @@ export class UsersService {
                         }),
                     }
                 }
-
             }
             workbookResponseData['reassessScreeners'] = reassessScreenerData;
 
@@ -1055,7 +1063,7 @@ export class UsersService {
                 {
                     type: QueryTypes.SELECT,
                     raw: true,
-                    replacements: { id: id, uid: 'cycle-' + userCurrCycle, personalInfoSlug: personalInfoSlugArr },
+                    replacements: { id: id, uid: 'cycle-' + parseInt(userCurrCycle), personalInfoSlug: personalInfoSlugArr },
                 }
             );
             let tempPersonalInfoList: any = {
@@ -1089,7 +1097,7 @@ export class UsersService {
                 {
                     type: QueryTypes.SELECT,
                     raw: true,
-                    replacements: { id: id, uid: 'cycle-' + userCurrCycle },
+                    replacements: { id: id, uid: 'cycle-' + parseInt(userCurrCycle) },
                 }
             );
             supplementList.map((dt: any) => {
@@ -1109,7 +1117,7 @@ export class UsersService {
                 {
                     type: QueryTypes.SELECT,
                     raw: true,
-                    replacements: { id: id, uid: 'cycle-' + userCurrCycle },
+                    replacements: { id: id, uid: 'cycle-' + parseInt(userCurrCycle) },
                 }
             );
             adherenceList.map((dt: any) => {
@@ -1118,7 +1126,6 @@ export class UsersService {
                 }
             })
 
-            // return { success: true, data: intakeScreenerData, message: 'User workbook fetched successfully' };
             return { success: true, data: workbookResponseData, message: 'User workbook fetched successfully' };
         } catch (error) {
             console.error(error, "---error---");

@@ -1003,6 +1003,7 @@ export class UsersService {
                                 quesData: dt.question.data,
                                 ansValue: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].values : '',
                                 quesSlug: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].question_slug : '',
+                                answer_date: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].answer_date : '',
                             }
                         }),
                     }
@@ -1018,6 +1019,7 @@ export class UsersService {
                                 renderData: dt.question.data,
                                 answer: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].values : '',
                                 question_slug: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].question_slug : '',
+                                answer_date: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].answer_date : '',
                             }
                         }),
                     }
@@ -1045,6 +1047,7 @@ export class UsersService {
                             renderData: dt.question.data,
                             answer: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].values : '',
                             question_slug: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].question_slug : '',
+                            answer_date: dt.question.answers && dt.question.answers.length > 0 ? dt.question.answers[0].answer_date : '',
                         }
                     }),
                 }
@@ -1106,7 +1109,7 @@ export class UsersService {
                 }
             })
 
-            let executeAdherenceListQuery = `SELECT json_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id") as "adherenceObj"
+            let executeAdherenceListQuery = `SELECT json_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id", 'answer_date', "A"."created_at") as "adherenceObj"
                 FROM public.answers AS "A"
                 LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
                 WHERE "A"."user_id" = :id AND "A"."question_slug" ilike 'adherence%' AND "A"."uid" = :uid

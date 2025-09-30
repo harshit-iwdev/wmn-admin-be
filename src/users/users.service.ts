@@ -1326,4 +1326,310 @@ export class UsersService {
         }
     }
 
+    async getAnalyticsTab1Data(): Promise<any> {
+        try {
+            const totalUserCohort: any = await this.userModel?.sequelize?.query(
+                `SELECT COUNT(*) as "totalUserCohort" FROM auth.users as U
+                WHERE U.last_seen IS NOT NULL`);
+
+            const subscribedUserCount: any = await this.userModel?.sequelize?.query(
+                `SELECT COUNT(DISTINCT(U.id)) as "subscribedUserCount" FROM auth.users AS U
+                JOIN public.metadata as M on U.id = M.user_id
+                WHERE M."user_type" != 'practitioner' AND M."plan" NOT IN ('free', 'trial', 'dev')`);
+
+            const giftedUserCount: any = await this.userModel?.sequelize?.query(
+                `SELECT COUNT(DISTINCT(U.id)) as "giftedUserCount" FROM auth.users AS U
+                JOIN public.metadata as M on U.id = M.user_id
+                WHERE M."user_type" != 'practitioner' AND M."gift" = true`);
+
+            const dailyActiveUserCount: any = await this.userModel?.sequelize?.query(
+                `SELECT COUNT(DISTINCT(U.id)) as "dailyActiveUsers" FROM auth.users AS U
+                JOIN public.metadata as M on U.id = M.user_id
+                WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '1 day'
+                AND M."user_type" != 'practitioner'`);
+
+            const weeklyActiveUserCount: any = await this.userModel?.sequelize?.query(
+                `SELECT COUNT(DISTINCT(U.id)) as "weeklyActiveUsers" FROM auth.users AS U
+                JOIN public.metadata as M on U.id = M.user_id
+                WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '7 day'
+                AND M."user_type" != 'practitioner'`);
+
+            const monthlyActiveUserCount: any = await this.userModel?.sequelize?.query(
+                `SELECT COUNT(DISTINCT(U.id)) as "monthlyActiveUsers" FROM auth.users AS U
+                JOIN public.metadata as M on U.id = M.user_id
+                WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '30 day'
+                AND M."user_type" != 'practitioner'`);
+
+            const reassessSubmittedUserCount: any = await this.userModel?.sequelize?.query(
+                `Select Count(Distinct(user_id)) as "reassessSubmittedUserCount" from public.survey_list_status 
+                where survey_list_slug ilike 'reassess-list' and status = 'completed'`);
+
+            return {
+                success: true, data: {
+                    totalUserCohort: totalUserCohort[0][0]?.totalUserCohort || 0,
+                    cohortData: {
+                        subscribedUserCount: subscribedUserCount[0][0]?.subscribedUserCount || 0,
+                        giftedUserCount: giftedUserCount[0][0]?.giftedUserCount || 0,
+                        dailyActiveUserCount: dailyActiveUserCount[0][0]?.dailyActiveUsers || 0,
+                        weeklyActiveUserCount: weeklyActiveUserCount[0][0]?.weeklyActiveUsers || 0,
+                        monthlyActiveUserCount: monthlyActiveUserCount[0][0]?.monthlyActiveUsers || 0,
+                    },
+                    retentionData: {
+                        dailyRetentionPercentage: ((dailyActiveUserCount[0][0]?.dailyActiveUsers / totalUserCohort[0][0]?.totalUserCohort) * 100).toFixed(2) || 0,
+                        weeklyRetentionPercentage: ((weeklyActiveUserCount[0][0]?.weeklyActiveUsers / totalUserCohort[0][0]?.totalUserCohort) * 100).toFixed(2) || 0,
+                        monthlyRetentionPercentage: ((monthlyActiveUserCount[0][0]?.monthlyActiveUsers / totalUserCohort[0][0]?.totalUserCohort) * 100).toFixed(2) || 0
+                    },
+                    completionData: {
+                        total: ((reassessSubmittedUserCount[0][0]?.reassessSubmittedUserCount / totalUserCohort[0][0]?.totalUserCohort) * 100).toFixed(2) || 0,
+                        subscribed: ((subscribedUserCount[0][0]?.subscribedUserCount / totalUserCohort[0][0]?.totalUserCohort) * 100).toFixed(2) || 0,
+                        gifted: ((giftedUserCount[0][0]?.giftedUserCount / totalUserCohort[0][0]?.totalUserCohort) * 100).toFixed(2) || 0,
+                    }
+
+                }, message: 'Analytics cohort data fetched successfully'
+            };
+        }
+        catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
+    async getAnalyticsTab2Data(): Promise<any> {
+        try {
+
+            let executeSelfEducationInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
+                    WHEN '0' THEN 'Less than High School'
+                    WHEN '1' THEN 'High School'
+                    WHEN '2' THEN 'Some College'
+                    WHEN '3' THEN 'College'
+                    WHEN '4' THEN 'Graduate School'
+                    ELSE 'Missing'
+                END AS education_level, COUNT(*) AS n,
+                ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
+                FROM public.answers AS "A"
+                WHERE "A"."question_slug" = 'personal-04-demo-edu'
+                GROUP BY education_level ORDER BY education_level`;
+
+            const selfEducationInfoList: any = await this.userModel?.sequelize?.query(
+                executeSelfEducationInfoQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                }
+            );
+            console.log(selfEducationInfoList, "---selfEducationInfoList---");
+
+            let executeParentEducationInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
+                    WHEN '0' THEN 'Less than High School'
+                    WHEN '1' THEN 'High School'
+                    WHEN '2' THEN 'Some College'
+                    WHEN '3' THEN 'College'
+                    WHEN '4' THEN 'Graduate School'
+                    ELSE 'Missing'
+                END AS education_level, COUNT(*) AS n,
+                ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
+                FROM public.answers AS "A"
+                WHERE "A"."question_slug" = 'personal-05-demo-par-edu'
+                GROUP BY education_level ORDER BY education_level`;
+
+            const parentEducationInfoList: any = await this.userModel?.sequelize?.query(
+                executeParentEducationInfoQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                }
+            );
+            console.log(parentEducationInfoList, "---parentEducationInfoList---");
+
+            let executeEthnicityInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
+                    WHEN 'White' THEN 'White'
+                    WHEN 'Other/Mixed' THEN 'Mixed'
+                    WHEN 'Black' THEN 'Black'
+                    ELSE 'Missing'
+                END AS ethnicity, COUNT(*) AS n,
+                ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
+                FROM public.answers AS "A"
+                WHERE "A"."question_slug" = 'personal-03-demo-ethnicity'
+                GROUP BY ethnicity ORDER BY ethnicity`;
+
+            const ethnicityInfoList: any = await this.userModel?.sequelize?.query(
+                executeEthnicityInfoQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                }
+            );
+            console.log(ethnicityInfoList, "---ethnicityInfoList---");
+
+            let executeGenderInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
+                    WHEN 'Man' THEN 'Man'
+                    WHEN 'Woman' THEN 'Woman'
+                    WHEN 'Other' THEN 'Other'
+                    ELSE 'Missing'
+                END AS gender, COUNT(*) AS n,
+                ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
+                FROM public.answers AS "A"
+                WHERE "A"."question_slug" = 'personal-02-demo-gender'
+                GROUP BY gender ORDER BY gender`;
+
+            const genderInfoList: any = await this.userModel?.sequelize?.query(
+                executeGenderInfoQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                }
+            );
+            console.log(genderInfoList, "---genderInfoList---");
+
+            let executeContinentInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
+                    WHEN '0' THEN 'North America'
+                    WHEN '1' THEN 'South America'
+                    WHEN '2' THEN 'Europe'
+                    WHEN '3' THEN 'Australia/Oceania'
+                    WHEN '4' THEN 'Asia'
+                    WHEN '5' THEN 'Africa'
+                    WHEN '6' THEN 'Antarctica'
+                    ELSE 'Missing'
+                END AS continent, COUNT(*) AS n,
+                ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
+                FROM public.answers AS "A"
+                WHERE "A"."question_slug" = 'personal-06-demo-continent'
+                GROUP BY continent ORDER BY continent`;
+
+            const continentInfoList: any = await this.userModel?.sequelize?.query(
+                executeContinentInfoQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                }
+            );
+            console.log(continentInfoList, "---continentInfoList---");
+
+            let executeAgeInfoQuery = `SELECT COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
+                COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
+                ROUND(100.0 * COUNT(*) FILTER (WHERE "A"."values"::text = '""') / COUNT(*), 2) AS missing_percent,
+                ROUND(AVG(("A"."values"->>0)::numeric) FILTER (WHERE ("A"."values"->>0) ~ '^[0-9]+$'), 2) AS mean_age,
+                ROUND(STDDEV(("A"."values"->>0)::numeric) FILTER (WHERE ("A"."values"->>0) ~ '^[0-9]+$'), 2) AS sd_age
+                FROM public.answers AS "A" WHERE "A"."question_slug" = 'personal-01-demo-age'`;
+
+            const ageInfoList: any = await this.userModel?.sequelize?.query(
+                executeAgeInfoQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                }
+            );
+            console.log(ageInfoList, "---ageInfoList---");
+
+            return { success: true, data: {
+                selfEducationInfo: selfEducationInfoList,
+                parentEducationInfo: parentEducationInfoList,
+                ethnicityInfo: ethnicityInfoList,
+                genderInfo: genderInfoList,
+                continentInfo: continentInfoList,
+                ageInfo: ageInfoList
+            }, message: 'Analytics tab 2 data fetched successfully' };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
+    async getAnalyticsTab3Data(): Promise<any> {
+        try {
+
+            let personalInfoSlugArr = ['personal-08-anthro-weight', 'personal-09-anthro-weight-high', 'personal-11-anthro-weight-freq', 'personal-10-anthro-weight-low', 'personal-08-anthro-height'];
+            let executeWeightInfoQuery = `SELECT 
+                COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
+                COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
+                ROUND(100.0 * COUNT(*) FILTER (WHERE "A"."values"::text = '""') / COUNT(*), 2) AS missing_percent,
+
+                -- mean and sd in lbs
+                ROUND(AVG((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric)
+                      FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS mean_weight_lbs,
+                ROUND(STDDEV((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric)
+                      FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS sd_weight_lbs,
+
+                -- mean and sd converted to kg
+                ROUND(AVG((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric * 0.453592)
+                      FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS mean_weight_kg,
+                ROUND(STDDEV((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric * 0.453592)
+                      FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS sd_weight_kg
+
+                FROM public.answers AS "A"
+                WHERE "A"."question_slug" = 'personal-08-anthro-weight'`;
+
+            const weightInfoList: any = await this.userModel?.sequelize?.query(
+                executeWeightInfoQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                }
+            );
+            console.log(weightInfoList, "---weightInfoList---");
+
+            let executeHeightInfoQuery = `SELECT 
+                COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
+                COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
+                ROUND(100.0 * COUNT(*) FILTER (WHERE "A"."values"::text = '""') / COUNT(*), 2) AS missing_percent,
+              
+                -- mean and sd in inches
+                ROUND(AVG((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric)
+                      FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS mean_height_in,
+                ROUND(STDDEV((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric)
+                      FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS sd_height_in,
+              
+                -- mean and sd converted to cm
+                ROUND(AVG((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric * 2.54)
+                      FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS mean_height_cm,
+                ROUND(STDDEV((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric * 2.54)
+                      FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS sd_height_cm
+            
+                FROM public.answers AS "A"
+                WHERE "A"."question_slug" = 'personal-08-anthro-height'`;
+
+            const heightInfoList: any = await this.userModel?.sequelize?.query(
+                executeHeightInfoQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                }
+            );
+            console.log(heightInfoList, "---heightInfoList---");
+
+            let executeWeightFreqInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
+                    WHEN '0' THEN 'Never'
+                    WHEN '1' THEN 'Yearly'
+                    WHEN '2' THEN 'Monthly'
+                    WHEN '3' THEN 'Weekly'
+                    WHEN '4' THEN 'Most Days'
+                    WHEN '5' THEN 'Daily'
+                    WHEN '6' THEN 'More than daily'
+                    ELSE 'Missing'
+                END AS weight_freq, COUNT(*) AS n,
+                ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
+                FROM public.answers AS "A"
+                WHERE "A"."question_slug" = 'personal-11-anthro-weight-freq'
+                GROUP BY weight_freq ORDER BY weight_freq`;
+
+            const weightFreqInfoList: any = await this.userModel?.sequelize?.query(
+                executeWeightFreqInfoQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                }
+            );
+            console.log(weightFreqInfoList, "---weightFreqInfoList---");
+
+            return { success: true, data: {
+                weightInfo: weightInfoList,
+                heightInfo: heightInfoList,
+                weightFreqInfo: weightFreqInfoList,
+            }, message: 'Analytics tab 2 data fetched successfully' };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
 }

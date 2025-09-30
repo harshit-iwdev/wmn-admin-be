@@ -107,4 +107,16 @@ export class UsersController {
         return this.usersService.createNewUser(userData);
     }
 
+    @UseGuards(AuthGuard)
+    @Get('/analytics/tab1')
+    async getAnalyticsTab1Data() {
+        return this.usersService.getAnalyticsTab1Data();
+    }
+
+    @UseGuards(AuthGuard)
+    @Get('/analytics/tab2')
+    async getAnalyticsTab2Data() {
+        return this.usersService.getAnalyticsTab2Data();
+    }
+
 }

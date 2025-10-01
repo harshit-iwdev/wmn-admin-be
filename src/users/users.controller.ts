@@ -108,15 +108,45 @@ export class UsersController {
     }
 
     @UseGuards(AuthGuard)
-    @Get('/analytics/tab1')
+    @Get('/analytics/cohort')
     async getAnalyticsTab1Data() {
         return this.usersService.getAnalyticsTab1Data();
     }
 
     @UseGuards(AuthGuard)
-    @Get('/analytics/tab2')
+    @Get('/analytics/demographics')
     async getAnalyticsTab2Data() {
         return this.usersService.getAnalyticsTab2Data();
+    }
+
+    @UseGuards(AuthGuard)
+    @Get('/analytics/anthropometrics')
+    async getAnalyticsTab3Data() {
+        return this.usersService.getAnalyticsTab3Data();
+    }
+
+    // @UseGuards(AuthGuard)
+    @Get('/analytics/adherence')
+    async getAnalyticsTab4Data() {
+        return this.usersService.getAnalyticsTab4Data();
+    }
+
+    @UseGuards(AuthGuard)
+    @Get('/analytics/onboarding-reassess')
+    async getAnalyticsTab5Data() {
+        return this.usersService.getAnalyticsTab5Data();
+    }
+
+    @UseGuards(AuthGuard)
+    @Get('/analytics/mental-health')
+    async getAnalyticsTab6Data() {
+        return this.usersService.getAnalyticsTab6Data();
+    }
+
+    @UseGuards(AuthGuard)
+    @Get('/analytics/feedback')
+    async getAnalyticsTab7Data() {
+        return this.usersService.getAnalyticsTab7Data();
     }
 
 }

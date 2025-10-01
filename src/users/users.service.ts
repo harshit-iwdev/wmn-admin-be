@@ -4,7 +4,7 @@ import { User } from '../models';
 import { QueryTypes } from 'sequelize';
 import { FilterDto, FoodLogsFilterDto, IResponse } from './dto/filter.dto';
 import { Resend } from 'resend';
-import { group } from 'console';
+import { group, log } from 'console';
 
 
 @Injectable()
@@ -1538,94 +1538,372 @@ export class UsersService {
     async getAnalyticsTab3Data(): Promise<any> {
         try {
 
-            let personalInfoSlugArr = ['personal-08-anthro-weight', 'personal-09-anthro-weight-high', 'personal-11-anthro-weight-freq', 'personal-10-anthro-weight-low', 'personal-08-anthro-height'];
-            let executeWeightInfoQuery = `SELECT 
-                COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
-                COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
-                ROUND(100.0 * COUNT(*) FILTER (WHERE "A"."values"::text = '""') / COUNT(*), 2) AS missing_percent,
-
-                -- mean and sd in lbs
-                ROUND(AVG((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric)
-                      FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS mean_weight_lbs,
-                ROUND(STDDEV((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric)
-                      FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS sd_weight_lbs,
-
-                -- mean and sd converted to kg
-                ROUND(AVG((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric * 0.453592)
-                      FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS mean_weight_kg,
-                ROUND(STDDEV((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric * 0.453592)
-                      FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS sd_weight_kg
-
-                FROM public.answers AS "A"
-                WHERE "A"."question_slug" = 'personal-08-anthro-weight'`;
-
-            const weightInfoList: any = await this.userModel?.sequelize?.query(
-                executeWeightInfoQuery,
+            let executeUserMetadataQuery = `SELECT MAX(cycle) AS max_cycle FROM public.metadata`;
+            const userMetadata: any = await this.userModel?.sequelize?.query(
+                executeUserMetadataQuery,
                 {
                     type: QueryTypes.SELECT,
                     raw: true,
                 }
             );
-            console.log(weightInfoList, "---weightInfoList---");
+            console.log(userMetadata, "---userMetadata---");
 
-            let executeHeightInfoQuery = `SELECT 
-                COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
-                COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
-                ROUND(100.0 * COUNT(*) FILTER (WHERE "A"."values"::text = '""') / COUNT(*), 2) AS missing_percent,
-              
-                -- mean and sd in inches
-                ROUND(AVG((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric)
-                      FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS mean_height_in,
-                ROUND(STDDEV((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric)
-                      FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS sd_height_in,
-              
-                -- mean and sd converted to cm
-                ROUND(AVG((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric * 2.54)
-                      FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS mean_height_cm,
-                ROUND(STDDEV((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric * 2.54)
-                      FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS sd_height_cm
-            
-                FROM public.answers AS "A"
-                WHERE "A"."question_slug" = 'personal-08-anthro-height'`;
+            let anthropometricsData : any[] = [];
 
-            const heightInfoList: any = await this.userModel?.sequelize?.query(
-                executeHeightInfoQuery,
+            for (let i = 0; i < 5; i++) {
+                let executeWeightInfoQuery = `SELECT 
+    COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
+    COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
+    ROUND(
+      100.0 * COUNT(*) FILTER (WHERE "A"."values"::text = '""') / NULLIF(COUNT(*), 0), 
+      2
+    ) AS missing_percent,
+
+    -- mean and sd in lbs
+    ROUND(AVG((regexp_replace("A"."values"->>0, '[^0-9]', '', 'g'))::numeric)
+          FILTER (WHERE regexp_replace("A"."values"->>0, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS mean_weight_lbs,
+    ROUND(STDDEV((regexp_replace("A"."values"->>0, '[^0-9]', '', 'g'))::numeric)
+          FILTER (WHERE regexp_replace("A"."values"->>0, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS sd_weight_lbs,
+
+    -- mean and sd converted to kg
+    ROUND(AVG((regexp_replace("A"."values"->>0, '[^0-9]', '', 'g'))::numeric * 0.453592)
+          FILTER (WHERE regexp_replace("A"."values"->>0, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS mean_weight_kg,
+    ROUND(STDDEV((regexp_replace("A"."values"->>0, '[^0-9]', '', 'g'))::numeric * 0.453592)
+          FILTER (WHERE regexp_replace("A"."values"->>0, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS sd_weight_kg
+
+FROM public.answers AS "A"
+WHERE "A"."question_slug" = 'personal-08-anthro-weight' AND "A"."uid" = :cycle`;
+    
+                const weightInfoList: any = await this.userModel?.sequelize?.query(
+                    executeWeightInfoQuery,
+                    {
+                        type: QueryTypes.SELECT,
+                        raw: true,
+                        replacements: { cycle: 'cycle-' + i }
+                    }
+                );
+    
+                let executeHeightInfoQuery = `SELECT 
+                    COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
+                    COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
+                    ROUND(100.0 * COUNT(*) FILTER (WHERE "A"."values"::text = '""') / NULLIF(COUNT(*), 0), 
+                    2) AS missing_percent,
+                  
+                    -- mean and sd in inches
+                    ROUND(AVG((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric)
+                          FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS mean_height_in,
+                    ROUND(STDDEV((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric)
+                          FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS sd_height_in,
+                  
+                    -- mean and sd converted to cm
+                    ROUND(AVG((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric * 2.54)
+                          FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS mean_height_cm,
+                    ROUND(STDDEV((regexp_replace("A"."values"::text, '[^0-9]', '', 'g'))::numeric * 2.54)
+                          FILTER (WHERE regexp_replace("A"."values"::text, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS sd_height_cm
+                
+                    FROM public.answers AS "A"
+                    WHERE "A"."question_slug" = 'personal-08-anthro-height' AND "A"."uid" = :cycle`;
+    
+                const heightInfoList: any = await this.userModel?.sequelize?.query(
+                    executeHeightInfoQuery,
+                    {
+                        type: QueryTypes.SELECT,
+                        raw: true,
+                        replacements: { cycle: 'cycle-' + i }
+                    }
+                );
+    
+                let executeWeightFreqInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
+                        WHEN '0' THEN 'Never'
+                        WHEN '1' THEN 'Yearly'
+                        WHEN '2' THEN 'Monthly'
+                        WHEN '3' THEN 'Weekly'
+                        WHEN '4' THEN 'Most Days'
+                        WHEN '5' THEN 'Daily'
+                        WHEN '6' THEN 'More than daily'
+                        ELSE 'Missing'
+                    END AS weight_freq, COUNT(*) AS n,
+                    ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
+                    FROM public.answers AS "A"
+                    WHERE "A"."question_slug" = 'personal-11-anthro-weight-freq' AND "A"."uid" = :cycle
+                    GROUP BY weight_freq ORDER BY weight_freq`;
+    
+                const weightFreqInfoList: any = await this.userModel?.sequelize?.query(
+                    executeWeightFreqInfoQuery,
+                    {
+                        type: QueryTypes.SELECT,
+                        raw: true,
+                        replacements: { cycle: 'cycle-' + i }
+                    }
+                );
+
+                anthropometricsData.push({
+                    ['cycle-' + i]: {
+                        weightInfo: weightInfoList,
+                        heightInfo: heightInfoList,
+                        weightFreqInfo: weightFreqInfoList,
+                    }
+                })
+            }
+
+            return { success: true, data: anthropometricsData, message: 'Analytics tab 3 data fetched successfully' };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
+    async getAnalyticsTab4Data(): Promise<any> {
+        try {
+
+            let executeAdherenceModInfoQuery = `WITH slugs AS (
+                SELECT unnest(ARRAY['adherence-01-food-log', 'adherence-02-nightly-review', 'adherence-03-videos', 'adherence-04-assignments', 'adherence-05-gems', 'adherence-06-links', 'adherence-07-recipes', 'adherence-08-cooking', 'adherence-09-meditation', 'adherence-10-guiding-principles']) AS slug),
+                counts AS (SELECT s.slug AS question_slug,
+                    CASE trim(both '"' from "A"."values"::text)
+                        WHEN '0' THEN 'Not Doing This'
+                        WHEN '1' THEN 'Doing Sometimes'
+                        WHEN '2' THEN 'Doing Most Times'
+                        WHEN '3' THEN 'Doing Currently'
+                        ELSE 'Missing'
+                    END AS mod, COUNT(*) AS n FROM slugs s
+                    LEFT JOIN public.answers AS "A" ON "A"."question_slug" = s.slug
+                    GROUP BY s.slug, mod
+                ),
+                per_slug AS (SELECT question_slug, jsonb_object_agg(mod, n) AS mods
+                    FROM counts GROUP BY question_slug)
+                SELECT jsonb_object_agg(question_slug, mods) AS result FROM per_slug;`;
+
+            const adherenceModInfoList: any = await this.userModel?.sequelize?.query(
+                executeAdherenceModInfoQuery,
                 {
                     type: QueryTypes.SELECT,
                     raw: true,
                 }
             );
-            console.log(heightInfoList, "---heightInfoList---");
+            console.log(adherenceModInfoList, "---adherenceModInfoList---");
 
-            let executeWeightFreqInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
-                    WHEN '0' THEN 'Never'
-                    WHEN '1' THEN 'Yearly'
-                    WHEN '2' THEN 'Monthly'
-                    WHEN '3' THEN 'Weekly'
-                    WHEN '4' THEN 'Most Days'
-                    WHEN '5' THEN 'Daily'
-                    WHEN '6' THEN 'More than daily'
-                    ELSE 'Missing'
-                END AS weight_freq, COUNT(*) AS n,
-                ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
-                FROM public.answers AS "A"
-                WHERE "A"."question_slug" = 'personal-11-anthro-weight-freq'
-                GROUP BY weight_freq ORDER BY weight_freq`;
+            let executeAdherenceReassessInfoQuery = `WITH slugs AS (
+                SELECT unnest(ARRAY['reassess-02-adherence-01-food-log', 'reassess-02-adherence-02-food-log', 'reassess-02-adherence-03-videos', 'reassess-02-adherence-04-assignments', 'reassess-02-adherence-05-gems', 'reassess-02-adherence-06-links', 'reassess-02-adherence-07-recipes', 'reassess-02-adherence-08-cooking', 'reassess-02-adherence-09-meditation', 'reassess-02-adherence-10-guiding-principles']) AS slug),
+                counts AS (SELECT s.slug AS question_slug,
+                    CASE trim(both '"' from "A"."values"::text)
+                        WHEN '0' THEN 'Not Doing This'
+                        WHEN '1' THEN 'Doing Sometimes'
+                        WHEN '2' THEN 'Doing Most Times'
+                        WHEN '3' THEN 'Doing Currently'
+                        ELSE 'Missing'
+                    END AS mod,
+                    COUNT(*) AS n FROM slugs s
+                    LEFT JOIN public.answers AS "A" ON "A"."question_slug" = s.slug
+                    GROUP BY s.slug, mod
+                ),
+                per_slug AS (SELECT question_slug, jsonb_object_agg(mod, n) AS mods
+                    FROM counts GROUP BY question_slug)
+                SELECT jsonb_object_agg(question_slug, mods) AS result FROM per_slug;`;
 
-            const weightFreqInfoList: any = await this.userModel?.sequelize?.query(
-                executeWeightFreqInfoQuery,
+            const adherenceReassessInfoList: any = await this.userModel?.sequelize?.query(
+                executeAdherenceReassessInfoQuery,
                 {
                     type: QueryTypes.SELECT,
                     raw: true,
                 }
             );
-            console.log(weightFreqInfoList, "---weightFreqInfoList---");
+            console.log(adherenceReassessInfoList[0].result, "---adherenceReassessInfoList---");
+
+            const finalResult = {
+                adherenceModInfo: {
+                    'food-log': adherenceModInfoList[0].result['adherence-01-food-log'],
+                    'nightly-review': adherenceModInfoList[0].result['adherence-02-nightly-review'],
+                    'videos': adherenceModInfoList[0].result['adherence-03-videos'],
+                    'assignments': adherenceModInfoList[0].result['adherence-04-assignments'],
+                    'gems': adherenceModInfoList[0].result['adherence-05-gems'],
+                    'links': adherenceModInfoList[0].result['adherence-06-links'],
+                    'recipes': adherenceModInfoList[0].result['adherence-07-recipes'],
+                    'cooking': adherenceModInfoList[0].result['adherence-08-cooking'],
+                    'meditation': adherenceModInfoList[0].result['adherence-09-meditation'],
+                    'guiding-principles': adherenceModInfoList[0].result['adherence-10-guiding-principles'],
+                },
+                adherenceReassessInfo: {
+                    'food-log': adherenceReassessInfoList[0].result['reassess-02-adherence-01-food-log'],
+                    'nightly-review': adherenceReassessInfoList[0].result['reassess-02-adherence-02-food-log'],
+                    'videos': adherenceReassessInfoList[0].result['reassess-02-adherence-03-videos'],
+                    'assignments': adherenceReassessInfoList[0].result['reassess-02-adherence-04-assignments'],
+                    'gems': adherenceReassessInfoList[0].result['reassess-02-adherence-05-gems'],
+                    'links': adherenceReassessInfoList[0].result['reassess-02-adherence-06-links'],
+                    'recipes': adherenceReassessInfoList[0].result['reassess-02-adherence-07-recipes'],
+                    'cooking': adherenceReassessInfoList[0].result['reassess-02-adherence-08-cooking'],
+                    'meditation': adherenceReassessInfoList[0].result['reassess-02-adherence-09-meditation'],
+                    'guiding-principles': adherenceReassessInfoList[0].result['reassess-02-adherence-10-guiding-principles'],
+                },
+            }
+
+            return { success: true, data: finalResult, message: 'Analytics tab 4 data fetched successfully' };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
+    async getAnalyticsTab5Data(): Promise<any> {
+        try {
+
+            let executeFeedbackQuery = `WITH ques AS (
+                SELECT unnest(ARRAY['personal-12-health-food','intake-08-ed-13-extra','personal-13-health-body','intake-03-anxiety-09-extra','personal-14-health-cooking','personal-15-health-meditation','personal-16-health-sleep-hours','personal-17-health-sleep-qual']) AS question_slug),
+                    stats AS (
+                    SELECT q.question_slug,
+                        COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
+                        COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
+                        ROUND(100.0 * COUNT(*) FILTER (WHERE "A"."values"::text = '""') / COUNT(*), 2) AS missing_percent,
+                        ROUND(AVG(("A"."values"->>0)::numeric) 
+                            FILTER (WHERE ("A"."values"->>0) ~ '^[0-9]+$'), 2) AS mean_overall,
+                        ROUND(STDDEV(("A"."values"->>0)::numeric) 
+                            FILTER (WHERE ("A"."values"->>0) ~ '^[0-9]+$'), 2) AS sd_overall
+                    FROM ques q
+                    LEFT JOIN public.answers AS "A" ON "A"."question_slug" = q.question_slug
+                    GROUP BY q.question_slug)
+                    SELECT jsonb_object_agg(question_slug, 
+                        jsonb_build_object(
+                          'missing_count', missing_count,
+                          'total_responses', total_responses,
+                          'missing_percent', missing_percent,
+                          'mean_overall', mean_overall,
+                          'sd_overall', sd_overall
+                        )) AS result FROM stats;`
+            const feedback: any = await this.userModel?.sequelize?.query(
+                executeFeedbackQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                }
+            );
+
+            return { success: true, data: feedback[0].result, message: 'Analytics tab 5 data fetched successfully' };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
+    async getAnalyticsTab6Data(): Promise<any> {
+        try {
+
+            let executeBaselineDataQuery = `WITH ques AS (
+                    SELECT SQ.question_slug, SQ.survey_slug
+                    FROM public.survey_questions AS SQ
+                    JOIN public.survey_list_surveys AS SLS
+                    ON SLS.survey_slug = SQ.survey_slug
+                    WHERE SLS.survey_list_slug = 'intake-list'
+                ),
+                stats AS (
+                    SELECT q.survey_slug,
+                        COUNT(*) FILTER (WHERE A.values::text = '""')::int AS missing_count,
+                        COUNT(*) FILTER (WHERE A.values::text <> '""')::int AS total_responses,
+                        ROUND(100.0 * COUNT(*) FILTER (WHERE A.values::text = '""') / COUNT(*), 2) AS missing_percent,
+                        ROUND(AVG((A.values->>0)::numeric) 
+                                FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS mean_overall,
+                        ROUND(STDDEV((A.values->>0)::numeric) 
+                                FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS sd_overall
+                    FROM ques q
+                    LEFT JOIN public.answers AS A
+                        ON A.question_slug = q.question_slug
+                    GROUP BY q.survey_slug
+                )
+                SELECT jsonb_object_agg(survey_slug, 
+                    jsonb_build_object(
+                        'missing_count', missing_count,
+                        'total_responses', total_responses,
+                        'missing_percent', missing_percent,
+                        'mean_overall', mean_overall,
+                        'sd_overall', sd_overall
+                    )) AS result FROM stats;`
+            const baselineData: any = await this.userModel?.sequelize?.query(
+                executeBaselineDataQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                }
+            );
+
+            let executeReassessDataQuery = `WITH ques AS (
+                    SELECT SQ.question_slug, SQ.survey_slug
+                    FROM public.survey_questions AS SQ
+                    JOIN public.survey_list_surveys AS SLS
+                    ON SLS.survey_slug = SQ.survey_slug
+                    WHERE SLS.survey_list_slug = 'reassess-list'
+                ),
+                stats AS (
+                    SELECT q.survey_slug,
+                        COUNT(*) FILTER (WHERE A.values::text = '""')::int AS missing_count,
+                        COUNT(*) FILTER (WHERE A.values::text <> '""')::int AS total_responses,
+                        ROUND(100.0 * COUNT(*) FILTER (WHERE A.values::text = '""') / COUNT(*), 2) AS missing_percent,
+                        ROUND(AVG((A.values->>0)::numeric) 
+                                FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS mean_overall,
+                        ROUND(STDDEV((A.values->>0)::numeric) 
+                                FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS sd_overall
+                    FROM ques q
+                    LEFT JOIN public.answers AS A
+                        ON A.question_slug = q.question_slug
+                    GROUP BY q.survey_slug
+                )
+                SELECT jsonb_object_agg(survey_slug, 
+                    jsonb_build_object(
+                        'missing_count', missing_count,
+                        'total_responses', total_responses,
+                        'missing_percent', missing_percent,
+                        'mean_overall', mean_overall,
+                        'sd_overall', sd_overall
+                    )) AS result FROM stats;`
+            const reassessData: any = await this.userModel?.sequelize?.query(
+                executeReassessDataQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                }
+            );
 
             return { success: true, data: {
-                weightInfo: weightInfoList,
-                heightInfo: heightInfoList,
-                weightFreqInfo: weightFreqInfoList,
-            }, message: 'Analytics tab 2 data fetched successfully' };
+                baselineData: baselineData[0].result,
+                reassessData: reassessData[0].result
+            }, message: 'Analytics tab 6 data fetched successfully' };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
+    async getAnalyticsTab7Data(): Promise<any> {
+        try {
+
+            let executeFeedbackQuery = `WITH ques AS (
+                SELECT unnest(ARRAY['reassess-01-feedback-03-nightly-review', 'reassess-01-feedback-09-links', 'reassess-01-feedback-05-education', 'reassess-01-feedback-12-science', 'reassess-01-feedback-04-intake', 'reassess-01-feedback-16-recommendations', 'reassess-01-feedback-00', 'reassess-01-feedback-15-other-feedback', 'reassess-01-feedback-08-gems', 'reassess-01-feedback-13-spirituality', 'reassess-01-feedback-11-other', 'reassess-01-feedback-10-recipes', 'reassess-01-feedback-01-app', 'reassess-01-feedback-06-videos', 'reassess-01-feedback-14-david-wiss', 'reassess-01-feedback-02-food-log', 'reassess-01-feedback-07-assignments']) AS question_slug),
+                    stats AS (
+                    SELECT q.question_slug,
+                        COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
+                        COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
+                        ROUND(100.0 * COUNT(*) FILTER (WHERE "A"."values"::text = '""') / COUNT(*), 2) AS missing_percent,
+                        ROUND(AVG(("A"."values"->>0)::numeric) 
+                            FILTER (WHERE ("A"."values"->>0) ~ '^[0-9]+$'), 2) AS mean_overall,
+                        ROUND(STDDEV(("A"."values"->>0)::numeric) 
+                            FILTER (WHERE ("A"."values"->>0) ~ '^[0-9]+$'), 2) AS sd_overall
+                    FROM ques q
+                    LEFT JOIN public.answers AS "A" ON "A"."question_slug" = q.question_slug
+                    GROUP BY q.question_slug)
+                    SELECT jsonb_object_agg(question_slug, 
+                        jsonb_build_object(
+                          'missing_count', missing_count,
+                          'total_responses', total_responses,
+                          'missing_percent', missing_percent,
+                          'mean_overall', mean_overall,
+                          'sd_overall', sd_overall
+                        )) AS result FROM stats;`
+            const feedback: any = await this.userModel?.sequelize?.query(
+                executeFeedbackQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                }
+            );
+
+            return { success: true, data: feedback[0].result, message: 'Analytics tab 7 data fetched successfully' };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);

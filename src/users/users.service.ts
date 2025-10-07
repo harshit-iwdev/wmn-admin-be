@@ -697,7 +697,7 @@ export class UsersService {
                             replacements: { id: id, question_slug: element, uid: 'review-' + item.review.review_date },
                         }
                     );
-                    if(intentionsCheckData.length > 0) {
+                    if (intentionsCheckData.length > 0) {
                         dailyIntentionsData.push(intentionsCheckData[0]);
                     }
                 }
@@ -870,7 +870,7 @@ export class UsersService {
                     })
                 }
             })
-            
+
             let executeCheckQuery = `SELECT pq."program_day", pm."title" as "moduleName",
                 json_agg(json_build_object('program_question_id', pq.id, 'program_day', pq."program_day", 'question_id', q.id, 'category', q."category", 'content', q."content", 'slug', q."slug", 'data', q."data", 'field_type', q."field_type", 'answer_id', a.id, 'uid', a.uid, 'values', a.values, 'question_slug', a.question_slug)) AS questions
                 FROM public."program_questions" pq
@@ -910,7 +910,7 @@ export class UsersService {
                 links: pinnedItemsData.filter((item: any) => item.links).map((item: any) => item.links).flat() || []
             }
 
-            let assignmentsData : any[] = [];
+            let assignmentsData: any[] = [];
             for (let i = 0; i < assignmentQuestionsData.length; i++) {
                 const element = assignmentQuestionsData[i];
 
@@ -966,7 +966,7 @@ export class UsersService {
             const intakeScreenerData = {};
             for (let i = 0; i < mentalScreener[0].survey_list_surveys.length; i++) {
                 const element = mentalScreener[0].survey_list_surveys[i];
-                intakeScreenerData['page-' + (i+1)] = {
+                intakeScreenerData['page-' + (i + 1)] = {
                     title: element.survey.title,
                     slug: element.survey.slug,
                     survey_questions: element.survey.survey_questions.map((dt: any) => {
@@ -1332,10 +1332,19 @@ export class UsersService {
                 `SELECT COUNT(*) as "totalUserCohort" FROM auth.users as U
                 WHERE U.last_seen IS NOT NULL`);
 
-            const subscribedUserCount: any = await this.userModel?.sequelize?.query(
-                `SELECT COUNT(DISTINCT(U.id)) as "subscribedUserCount" FROM auth.users AS U
-                JOIN public.metadata as M on U.id = M.user_id
-                WHERE M."user_type" != 'practitioner' AND M."plan" NOT IN ('free', 'trial', 'dev')`);
+            const apiKey = process.env.REV_CAT_KEY_V2 || process.env.REVENUECAT_API_KEY;
+            const projectKey = process.env.REV_CAT_PROJECT_KEY;
+            let revCatUrl = `https://api.revenuecat.com/v2/projects/${projectKey}/metrics/overview`
+            const response = await fetch(revCatUrl, {
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+            const data = await response.json();
+            console.log(data, "---data---");
+            const subscribedUserData = data.metrics.find((metric: any) => metric.id === 'active_subscriptions');
+            console.log(subscribedUserData, "---subscribedUserData---");
 
             const giftedUserCount: any = await this.userModel?.sequelize?.query(
                 `SELECT COUNT(DISTINCT(U.id)) as "giftedUserCount" FROM auth.users AS U
@@ -1368,7 +1377,7 @@ export class UsersService {
                 success: true, data: {
                     totalUserCohort: totalUserCohort[0][0]?.totalUserCohort || 0,
                     cohortData: {
-                        subscribedUserCount: subscribedUserCount[0][0]?.subscribedUserCount || 0,
+                        subscribedUserCount: subscribedUserData.value || 0,
                         giftedUserCount: giftedUserCount[0][0]?.giftedUserCount || 0,
                         dailyActiveUserCount: dailyActiveUserCount[0][0]?.dailyActiveUsers || 0,
                         weeklyActiveUserCount: weeklyActiveUserCount[0][0]?.weeklyActiveUsers || 0,
@@ -1381,7 +1390,7 @@ export class UsersService {
                     },
                     completionData: {
                         total: ((reassessSubmittedUserCount[0][0]?.reassessSubmittedUserCount / totalUserCohort[0][0]?.totalUserCohort) * 100).toFixed(2) || 0,
-                        subscribed: ((subscribedUserCount[0][0]?.subscribedUserCount / totalUserCohort[0][0]?.totalUserCohort) * 100).toFixed(2) || 0,
+                        subscribed: ((subscribedUserData.value / totalUserCohort[0][0]?.totalUserCohort) * 100).toFixed(2) || 0,
                         gifted: ((giftedUserCount[0][0]?.giftedUserCount / totalUserCohort[0][0]?.totalUserCohort) * 100).toFixed(2) || 0,
                     }
 
@@ -1417,7 +1426,6 @@ export class UsersService {
                     raw: true,
                 }
             );
-            console.log(selfEducationInfoList, "---selfEducationInfoList---");
 
             let executeParentEducationInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
                     WHEN '0' THEN 'Less than High School'
@@ -1439,7 +1447,6 @@ export class UsersService {
                     raw: true,
                 }
             );
-            console.log(parentEducationInfoList, "---parentEducationInfoList---");
 
             let executeEthnicityInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
                     WHEN 'White' THEN 'White'
@@ -1459,7 +1466,6 @@ export class UsersService {
                     raw: true,
                 }
             );
-            console.log(ethnicityInfoList, "---ethnicityInfoList---");
 
             let executeGenderInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
                     WHEN 'Man' THEN 'Man'
@@ -1479,7 +1485,6 @@ export class UsersService {
                     raw: true,
                 }
             );
-            console.log(genderInfoList, "---genderInfoList---");
 
             let executeContinentInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
                     WHEN '0' THEN 'North America'
@@ -1503,7 +1508,6 @@ export class UsersService {
                     raw: true,
                 }
             );
-            console.log(continentInfoList, "---continentInfoList---");
 
             let executeAgeInfoQuery = `SELECT COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
                 COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
@@ -1519,16 +1523,17 @@ export class UsersService {
                     raw: true,
                 }
             );
-            console.log(ageInfoList, "---ageInfoList---");
 
-            return { success: true, data: {
-                selfEducationInfo: selfEducationInfoList,
-                parentEducationInfo: parentEducationInfoList,
-                ethnicityInfo: ethnicityInfoList,
-                genderInfo: genderInfoList,
-                continentInfo: continentInfoList,
-                ageInfo: ageInfoList
-            }, message: 'Analytics tab 2 data fetched successfully' };
+            return {
+                success: true, data: {
+                    selfEducationInfo: selfEducationInfoList,
+                    parentEducationInfo: parentEducationInfoList,
+                    ethnicityInfo: ethnicityInfoList,
+                    genderInfo: genderInfoList,
+                    continentInfo: continentInfoList,
+                    ageInfo: ageInfoList
+                }, message: 'Analytics tab 2 data fetched successfully'
+            };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);
@@ -1537,7 +1542,6 @@ export class UsersService {
 
     async getAnalyticsTab3Data(): Promise<any> {
         try {
-
             let executeUserMetadataQuery = `SELECT MAX(cycle) AS max_cycle FROM public.metadata`;
             const userMetadata: any = await this.userModel?.sequelize?.query(
                 executeUserMetadataQuery,
@@ -1546,34 +1550,32 @@ export class UsersService {
                     raw: true,
                 }
             );
-            console.log(userMetadata, "---userMetadata---");
 
-            let anthropometricsData : any[] = [];
-
+            let anthropometricsData: any[] = [];
             for (let i = 0; i < 5; i++) {
                 let executeWeightInfoQuery = `SELECT 
-    COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
-    COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
-    ROUND(
-      100.0 * COUNT(*) FILTER (WHERE "A"."values"::text = '""') / NULLIF(COUNT(*), 0), 
-      2
-    ) AS missing_percent,
+                    COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
+                    COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
+                    ROUND(
+                      100.0 * COUNT(*) FILTER (WHERE "A"."values"::text = '""') / NULLIF(COUNT(*), 0), 
+                      2
+                    ) AS missing_percent,
+                
+                    -- mean and sd in lbs
+                    ROUND(AVG((regexp_replace("A"."values"->>0, '[^0-9]', '', 'g'))::numeric)
+                          FILTER (WHERE regexp_replace("A"."values"->>0, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS mean_weight_lbs,
+                    ROUND(STDDEV((regexp_replace("A"."values"->>0, '[^0-9]', '', 'g'))::numeric)
+                          FILTER (WHERE regexp_replace("A"."values"->>0, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS sd_weight_lbs,
+                
+                    -- mean and sd converted to kg
+                    ROUND(AVG((regexp_replace("A"."values"->>0, '[^0-9]', '', 'g'))::numeric * 0.453592)
+                          FILTER (WHERE regexp_replace("A"."values"->>0, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS mean_weight_kg,
+                    ROUND(STDDEV((regexp_replace("A"."values"->>0, '[^0-9]', '', 'g'))::numeric * 0.453592)
+                          FILTER (WHERE regexp_replace("A"."values"->>0, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS sd_weight_kg
+                
+                    FROM public.answers AS "A"
+                    WHERE "A"."question_slug" = 'personal-08-anthro-weight' AND "A"."uid" = :cycle`;
 
-    -- mean and sd in lbs
-    ROUND(AVG((regexp_replace("A"."values"->>0, '[^0-9]', '', 'g'))::numeric)
-          FILTER (WHERE regexp_replace("A"."values"->>0, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS mean_weight_lbs,
-    ROUND(STDDEV((regexp_replace("A"."values"->>0, '[^0-9]', '', 'g'))::numeric)
-          FILTER (WHERE regexp_replace("A"."values"->>0, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS sd_weight_lbs,
-
-    -- mean and sd converted to kg
-    ROUND(AVG((regexp_replace("A"."values"->>0, '[^0-9]', '', 'g'))::numeric * 0.453592)
-          FILTER (WHERE regexp_replace("A"."values"->>0, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS mean_weight_kg,
-    ROUND(STDDEV((regexp_replace("A"."values"->>0, '[^0-9]', '', 'g'))::numeric * 0.453592)
-          FILTER (WHERE regexp_replace("A"."values"->>0, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS sd_weight_kg
-
-FROM public.answers AS "A"
-WHERE "A"."question_slug" = 'personal-08-anthro-weight' AND "A"."uid" = :cycle`;
-    
                 const weightInfoList: any = await this.userModel?.sequelize?.query(
                     executeWeightInfoQuery,
                     {
@@ -1582,7 +1584,7 @@ WHERE "A"."question_slug" = 'personal-08-anthro-weight' AND "A"."uid" = :cycle`;
                         replacements: { cycle: 'cycle-' + i }
                     }
                 );
-    
+
                 let executeHeightInfoQuery = `SELECT 
                     COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
                     COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
@@ -1603,7 +1605,7 @@ WHERE "A"."question_slug" = 'personal-08-anthro-weight' AND "A"."uid" = :cycle`;
                 
                     FROM public.answers AS "A"
                     WHERE "A"."question_slug" = 'personal-08-anthro-height' AND "A"."uid" = :cycle`;
-    
+
                 const heightInfoList: any = await this.userModel?.sequelize?.query(
                     executeHeightInfoQuery,
                     {
@@ -1612,7 +1614,7 @@ WHERE "A"."question_slug" = 'personal-08-anthro-weight' AND "A"."uid" = :cycle`;
                         replacements: { cycle: 'cycle-' + i }
                     }
                 );
-    
+
                 let executeWeightFreqInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
                         WHEN '0' THEN 'Never'
                         WHEN '1' THEN 'Yearly'
@@ -1620,16 +1622,39 @@ WHERE "A"."question_slug" = 'personal-08-anthro-weight' AND "A"."uid" = :cycle`;
                         WHEN '3' THEN 'Weekly'
                         WHEN '4' THEN 'Most Days'
                         WHEN '5' THEN 'Daily'
-                        WHEN '6' THEN 'More than daily'
+                        WHEN '6' THEN 'More than Daily'
                         ELSE 'Missing'
                     END AS weight_freq, COUNT(*) AS n,
                     ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
                     FROM public.answers AS "A"
                     WHERE "A"."question_slug" = 'personal-11-anthro-weight-freq' AND "A"."uid" = :cycle
                     GROUP BY weight_freq ORDER BY weight_freq`;
-    
+
                 const weightFreqInfoList: any = await this.userModel?.sequelize?.query(
                     executeWeightFreqInfoQuery,
+                    {
+                        type: QueryTypes.SELECT,
+                        raw: true,
+                        replacements: { cycle: 'cycle-' + i }
+                    }
+                );
+
+                let executeHighWeightQuery = `SELECT 
+                    COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
+                    COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
+                    ROUND(100.0 * COUNT(*) FILTER (WHERE "A"."values"::text = '""') / NULLIF(COUNT(*), 0), 2) AS missing_percent,
+                  
+                    ROUND( AVG((regexp_replace("A"."values"::text, '[^0-9\.]', '', 'g')::numeric) * 0.45359237)
+                    FILTER (WHERE "A"."values"::text ~ '^[0-9]+(lbs)?$' OR "A"."values"::text ~ '^[0-9]+$'), 2) AS mean_weight_kg,
+                  
+                    ROUND( STDDEV((regexp_replace("A"."values"::text, '[^0-9\.]', '', 'g')::numeric) * 0.45359237)
+                    FILTER (WHERE "A"."values"::text ~ '^[0-9]+(lbs)?$' OR "A"."values"::text ~ '^[0-9]+$'), 2) AS sd_weight_kg
+                
+                    FROM public.answers AS "A"
+                    WHERE "A"."question_slug" = 'personal-09-anthro-weight-high' AND "A"."uid" = :cycle`;
+
+                const highWeightInfoList: any = await this.userModel?.sequelize?.query(
+                    executeHighWeightQuery,
                     {
                         type: QueryTypes.SELECT,
                         raw: true,
@@ -1642,6 +1667,7 @@ WHERE "A"."question_slug" = 'personal-08-anthro-weight' AND "A"."uid" = :cycle`;
                         weightInfo: weightInfoList,
                         heightInfo: heightInfoList,
                         weightFreqInfo: weightFreqInfoList,
+                        highWeightInfo: highWeightInfoList,
                     }
                 })
             }
@@ -1860,10 +1886,12 @@ WHERE "A"."question_slug" = 'personal-08-anthro-weight' AND "A"."uid" = :cycle`;
                 }
             );
 
-            return { success: true, data: {
-                baselineData: baselineData[0].result,
-                reassessData: reassessData[0].result
-            }, message: 'Analytics tab 6 data fetched successfully' };
+            return {
+                success: true, data: {
+                    baselineData: baselineData[0].result,
+                    reassessData: reassessData[0].result
+                }, message: 'Analytics tab 6 data fetched successfully'
+            };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);

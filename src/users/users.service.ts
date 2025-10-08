@@ -1342,9 +1342,7 @@ export class UsersService {
                 },
             });
             const data = await response.json();
-            console.log(data, "---data---");
             const subscribedUserData = data.metrics.find((metric: any) => metric.id === 'active_subscriptions');
-            console.log(subscribedUserData, "---subscribedUserData---");
 
             const giftedUserCount: any = await this.userModel?.sequelize?.query(
                 `SELECT COUNT(DISTINCT(U.id)) as "giftedUserCount" FROM auth.users AS U
@@ -1373,25 +1371,30 @@ export class UsersService {
                 `Select Count(Distinct(user_id)) as "reassessSubmittedUserCount" from public.survey_list_status 
                 where survey_list_slug ilike 'reassess-list' and status = 'completed'`);
 
+            const reassessSubmitGiftedUserCount: any = await this.userModel?.sequelize?.query(
+                `Select Count(Distinct("SLS".user_id)) as "reassessSubmitGiftedUserCount" from public.survey_list_status "SLS"
+                join public.metadata as M on "SLS".user_id = M.user_id
+                where "SLS".survey_list_slug ilike 'reassess-list' and "SLS".status = 'completed' and M."gift" = true`);
+
             return {
                 success: true, data: {
                     totalUserCohort: totalUserCohort[0][0]?.totalUserCohort || 0,
                     cohortData: {
                         subscribedUserCount: subscribedUserData.value || 0,
-                        giftedUserCount: giftedUserCount[0][0]?.giftedUserCount || 0,
-                        dailyActiveUserCount: dailyActiveUserCount[0][0]?.dailyActiveUsers || 0,
-                        weeklyActiveUserCount: weeklyActiveUserCount[0][0]?.weeklyActiveUsers || 0,
-                        monthlyActiveUserCount: monthlyActiveUserCount[0][0]?.monthlyActiveUsers || 0,
+                        giftedUserCount: parseInt(giftedUserCount[0][0]?.giftedUserCount) || 0,
+                        dailyActiveUserCount: parseInt(dailyActiveUserCount[0][0]?.dailyActiveUsers) || 0,
+                        weeklyActiveUserCount: parseInt(weeklyActiveUserCount[0][0]?.weeklyActiveUsers) || 0,
+                        monthlyActiveUserCount: parseInt(monthlyActiveUserCount[0][0]?.monthlyActiveUsers) || 0,
                     },
                     retentionData: {
-                        dailyRetentionPercentage: ((dailyActiveUserCount[0][0]?.dailyActiveUsers / totalUserCohort[0][0]?.totalUserCohort) * 100).toFixed(2) || 0,
-                        weeklyRetentionPercentage: ((weeklyActiveUserCount[0][0]?.weeklyActiveUsers / totalUserCohort[0][0]?.totalUserCohort) * 100).toFixed(2) || 0,
-                        monthlyRetentionPercentage: ((monthlyActiveUserCount[0][0]?.monthlyActiveUsers / totalUserCohort[0][0]?.totalUserCohort) * 100).toFixed(2) || 0
+                        dailyRetentionPercentage: parseInt(dailyActiveUserCount[0][0]?.dailyActiveUsers),
+                        weeklyRetentionPercentage: parseInt(weeklyActiveUserCount[0][0]?.weeklyActiveUsers),
+                        monthlyRetentionPercentage: parseInt(monthlyActiveUserCount[0][0]?.monthlyActiveUsers),
                     },
                     completionData: {
-                        total: ((reassessSubmittedUserCount[0][0]?.reassessSubmittedUserCount / totalUserCohort[0][0]?.totalUserCohort) * 100).toFixed(2) || 0,
-                        subscribed: ((subscribedUserData.value / totalUserCohort[0][0]?.totalUserCohort) * 100).toFixed(2) || 0,
-                        gifted: ((giftedUserCount[0][0]?.giftedUserCount / totalUserCohort[0][0]?.totalUserCohort) * 100).toFixed(2) || 0,
+                        total: reassessSubmittedUserCount[0][0]?.reassessSubmittedUserCount,
+                        subscribed: parseInt(subscribedUserData.value),
+                        gifted: parseInt(reassessSubmitGiftedUserCount[0][0]?.reassessSubmitGiftedUserCount),
                     }
 
                 }, message: 'Analytics cohort data fetched successfully'
@@ -1662,17 +1665,67 @@ export class UsersService {
                     }
                 );
 
+                let executeLowWeightQuery = `SELECT 
+                    COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
+                    COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
+                    ROUND(100.0 * COUNT(*) FILTER (WHERE "A"."values"::text = '""') / NULLIF(COUNT(*), 0), 2) AS missing_percent,
+                  
+                    ROUND( AVG((regexp_replace("A"."values"::text, '[^0-9\.]', '', 'g')::numeric) * 0.45359237)
+                    FILTER (WHERE "A"."values"::text ~ '^[0-9]+(lbs)?$' OR "A"."values"::text ~ '^[0-9]+$'), 2) AS mean_weight_kg,
+                  
+                    ROUND( STDDEV((regexp_replace("A"."values"::text, '[^0-9\.]', '', 'g')::numeric) * 0.45359237)
+                    FILTER (WHERE "A"."values"::text ~ '^[0-9]+(lbs)?$' OR "A"."values"::text ~ '^[0-9]+$'), 2) AS sd_weight_kg
+                
+                    FROM public.answers AS "A"
+                    WHERE "A"."question_slug" = 'personal-10-anthro-weight-low' AND "A"."uid" = :cycle`;
+
+                const lowWeightInfoList: any = await this.userModel?.sequelize?.query(
+                    executeLowWeightQuery,
+                    {
+                        type: QueryTypes.SELECT,
+                        raw: true,
+                        replacements: { cycle: 'cycle-' + i }
+                    }
+                );
+
                 anthropometricsData.push({
                     ['cycle-' + i]: {
                         weightInfo: weightInfoList,
                         heightInfo: heightInfoList,
                         weightFreqInfo: weightFreqInfoList,
                         highWeightInfo: highWeightInfoList,
+                        lowWeightInfo: lowWeightInfoList,
                     }
                 })
             }
 
-            return { success: true, data: anthropometricsData, message: 'Analytics tab 3 data fetched successfully' };
+            let executeWeightFreqInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
+                    WHEN '0' THEN 'Never'
+                    WHEN '1' THEN 'Yearly'
+                    WHEN '2' THEN 'Monthly'
+                    WHEN '3' THEN 'Weekly'
+                    WHEN '4' THEN 'Most Days'
+                    WHEN '5' THEN 'Daily'
+                    WHEN '6' THEN 'More than Daily'
+                    ELSE 'Missing'
+                END AS weight_freq, COUNT(*) AS n,
+                ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
+                FROM public.answers AS "A"
+                WHERE "A"."question_slug" = 'personal-11-anthro-weight-freq' AND "A"."uid" = :cycle
+                GROUP BY weight_freq ORDER BY weight_freq`;
+
+            const weightFreqInfoList: any = await this.userModel?.sequelize?.query(
+                executeWeightFreqInfoQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { cycle: 'cycle-0' }
+                }
+            );
+
+            console.log(weightFreqInfoList, "---weightFreqInfoList---");
+
+            return { success: true, data: {anthropometricsData, weightFreqInfo: weightFreqInfoList}, message: 'Analytics tab 3 data fetched successfully' };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);
@@ -1773,7 +1826,7 @@ export class UsersService {
         try {
 
             let executeFeedbackQuery = `WITH ques AS (
-                SELECT unnest(ARRAY['personal-12-health-food','intake-08-ed-13-extra','personal-13-health-body','intake-03-anxiety-09-extra','personal-14-health-cooking','personal-15-health-meditation','personal-16-health-sleep-hours','personal-17-health-sleep-qual']) AS question_slug),
+                SELECT unnest(ARRAY['personal-12-health-food','personal-13-health-body','personal-14-health-cooking','personal-15-health-meditation','personal-16-health-sleep-hours','personal-17-health-sleep-qual']) AS question_slug),
                     stats AS (
                     SELECT q.question_slug,
                         COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
@@ -1785,6 +1838,7 @@ export class UsersService {
                             FILTER (WHERE ("A"."values"->>0) ~ '^[0-9]+$'), 2) AS sd_overall
                     FROM ques q
                     LEFT JOIN public.answers AS "A" ON "A"."question_slug" = q.question_slug
+                    WHERE "A"."uid" = :cycle
                     GROUP BY q.question_slug)
                     SELECT jsonb_object_agg(question_slug, 
                         jsonb_build_object(
@@ -1794,15 +1848,24 @@ export class UsersService {
                           'mean_overall', mean_overall,
                           'sd_overall', sd_overall
                         )) AS result FROM stats;`
-            const feedback: any = await this.userModel?.sequelize?.query(
+
+            let feedback: any[] = [];
+            for (let i = 0; i < 5; i++) {
+                let result: any = await this.userModel?.sequelize?.query(
                 executeFeedbackQuery,
                 {
                     type: QueryTypes.SELECT,
                     raw: true,
-                }
-            );
+                    replacements: { cycle: 'cycle-' + i }
+                    }
+                );
 
-            return { success: true, data: feedback[0].result, message: 'Analytics tab 5 data fetched successfully' };
+                feedback.push({
+                    ['cycle-' + i]: result[0].result
+                })
+            }
+
+            return { success: true, data: feedback, message: 'Analytics tab 5 data fetched successfully' };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);
@@ -1849,47 +1912,56 @@ export class UsersService {
                 }
             );
 
-            let executeReassessDataQuery = `WITH ques AS (
-                    SELECT SQ.question_slug, SQ.survey_slug
-                    FROM public.survey_questions AS SQ
-                    JOIN public.survey_list_surveys AS SLS
-                    ON SLS.survey_slug = SQ.survey_slug
-                    WHERE SLS.survey_list_slug = 'reassess-list'
-                ),
-                stats AS (
-                    SELECT q.survey_slug,
-                        COUNT(*) FILTER (WHERE A.values::text = '""')::int AS missing_count,
-                        COUNT(*) FILTER (WHERE A.values::text <> '""')::int AS total_responses,
-                        ROUND(100.0 * COUNT(*) FILTER (WHERE A.values::text = '""') / COUNT(*), 2) AS missing_percent,
-                        ROUND(AVG((A.values->>0)::numeric) 
-                                FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS mean_overall,
-                        ROUND(STDDEV((A.values->>0)::numeric) 
-                                FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS sd_overall
-                    FROM ques q
-                    LEFT JOIN public.answers AS A
-                        ON A.question_slug = q.question_slug
-                    GROUP BY q.survey_slug
-                )
-                SELECT jsonb_object_agg(survey_slug, 
-                    jsonb_build_object(
-                        'missing_count', missing_count,
-                        'total_responses', total_responses,
-                        'missing_percent', missing_percent,
-                        'mean_overall', mean_overall,
-                        'sd_overall', sd_overall
-                    )) AS result FROM stats;`
-            const reassessData: any = await this.userModel?.sequelize?.query(
-                executeReassessDataQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                }
-            );
+            let reassessData: any[] = [];
+            for (let i = 1; i < 5; i++) {
+                let executeReassessDataQuery = `WITH ques AS (
+                        SELECT SQ.question_slug, SQ.survey_slug
+                        FROM public.survey_questions AS SQ
+                        JOIN public.survey_list_surveys AS SLS
+                        ON SLS.survey_slug = SQ.survey_slug
+                        WHERE SLS.survey_list_slug = 'reassess-list'
+                    ),
+                    stats AS (
+                        SELECT q.survey_slug,
+                            COUNT(*) FILTER (WHERE A.values::text = '""')::int AS missing_count,
+                            COUNT(*) FILTER (WHERE A.values::text <> '""')::int AS total_responses,
+                            ROUND(100.0 * COUNT(*) FILTER (WHERE A.values::text = '""') / COUNT(*), 2) AS missing_percent,
+                            ROUND(AVG((A.values->>0)::numeric) 
+                                    FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS mean_overall,
+                            ROUND(STDDEV((A.values->>0)::numeric) 
+                                    FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS sd_overall
+                        FROM ques q
+                        LEFT JOIN public.answers AS A
+                            ON A.question_slug = q.question_slug
+                        WHERE A.uid = :cycle
+                        GROUP BY q.survey_slug
+                    )
+                    SELECT jsonb_object_agg(survey_slug, 
+                        jsonb_build_object(
+                            'missing_count', missing_count,
+                            'total_responses', total_responses,
+                            'missing_percent', missing_percent,
+                            'mean_overall', mean_overall,
+                            'sd_overall', sd_overall
+                        )) AS result FROM stats;`
+                let result: any = await this.userModel?.sequelize?.query(
+                    executeReassessDataQuery,
+                    {
+                        type: QueryTypes.SELECT,
+                        raw: true,
+                        replacements: { cycle: 'cycle-' + i }
+                    }
+                );
+
+                reassessData.push({
+                    ['cycle-' + i]: result[0].result
+                })
+            }
 
             return {
                 success: true, data: {
                     baselineData: baselineData[0].result,
-                    reassessData: reassessData[0].result
+                    reassessData: reassessData
                 }, message: 'Analytics tab 6 data fetched successfully'
             };
         } catch (error) {
@@ -1902,7 +1974,7 @@ export class UsersService {
         try {
 
             let executeFeedbackQuery = `WITH ques AS (
-                SELECT unnest(ARRAY['reassess-01-feedback-03-nightly-review', 'reassess-01-feedback-09-links', 'reassess-01-feedback-05-education', 'reassess-01-feedback-12-science', 'reassess-01-feedback-04-intake', 'reassess-01-feedback-16-recommendations', 'reassess-01-feedback-00', 'reassess-01-feedback-15-other-feedback', 'reassess-01-feedback-08-gems', 'reassess-01-feedback-13-spirituality', 'reassess-01-feedback-11-other', 'reassess-01-feedback-10-recipes', 'reassess-01-feedback-01-app', 'reassess-01-feedback-06-videos', 'reassess-01-feedback-14-david-wiss', 'reassess-01-feedback-02-food-log', 'reassess-01-feedback-07-assignments']) AS question_slug),
+                SELECT unnest(ARRAY['reassess-01-feedback-03-nightly-review', 'reassess-01-feedback-09-links', 'reassess-01-feedback-05-education', 'reassess-01-feedback-12-science', 'reassess-01-feedback-04-intake', 'reassess-01-feedback-16-recommendations', 'reassess-01-feedback-00', 'reassess-01-feedback-08-gems', 'reassess-01-feedback-13-spirituality', 'reassess-01-feedback-11-other', 'reassess-01-feedback-10-recipes', 'reassess-01-feedback-01-app', 'reassess-01-feedback-06-videos', 'reassess-01-feedback-14-david-wiss', 'reassess-01-feedback-02-food-log', 'reassess-01-feedback-07-assignments']) AS question_slug),
                     stats AS (
                     SELECT q.question_slug,
                         COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
@@ -1931,7 +2003,37 @@ export class UsersService {
                 }
             );
 
-            return { success: true, data: feedback[0].result, message: 'Analytics tab 7 data fetched successfully' };
+            let executeOtherFeedbackQuery = `SELECT jsonb_build_object(
+                    'total_count', COUNT(*)::int,
+                    'missing_count', COUNT(*) FILTER (WHERE length(trim("values"::text, '"')) = 0)::int,
+                    'distinct_values', jsonb_agg(DISTINCT "values" ORDER BY "values")
+                ) AS summary
+                FROM public.answers
+                WHERE question_slug = 'reassess-01-feedback-15-other-feedback'`;
+            const otherFeedback: any = await this.userModel?.sequelize?.query(
+                executeOtherFeedbackQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                }
+            );
+
+            let executeRecommendationFeedbackQuery = `SELECT jsonb_build_object(
+                    'total_count', COUNT(*)::int,
+                    'missing_count', COUNT(*) FILTER (WHERE length(trim("values"::text, '"')) = 0)::int,
+                    'distinct_values', jsonb_agg(DISTINCT "values" ORDER BY "values")
+                ) AS summary
+                FROM public.answers
+                WHERE question_slug = 'reassess-01-feedback-16-recommendations'`;
+            const recommendationFeedbackFeedback: any = await this.userModel?.sequelize?.query(
+                executeRecommendationFeedbackQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                }
+            );
+
+            return { success: true, data: {feedback: feedback[0].result, otherFeedback:otherFeedback[0].summary, recommendations:recommendationFeedbackFeedback[0].summary}, message: 'Analytics tab 7 data fetched successfully' };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);

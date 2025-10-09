@@ -1347,25 +1347,22 @@ export class UsersService {
             const giftedUserCount: any = await this.userModel?.sequelize?.query(
                 `SELECT COUNT(DISTINCT(U.id)) as "giftedUserCount" FROM auth.users AS U
                 JOIN public.metadata as M on U.id = M.user_id
-                WHERE M."user_type" != 'practitioner' AND M."gift" = true`);
+                WHERE M."gift" = true`);
 
             const dailyActiveUserCount: any = await this.userModel?.sequelize?.query(
                 `SELECT COUNT(DISTINCT(U.id)) as "dailyActiveUsers" FROM auth.users AS U
                 JOIN public.metadata as M on U.id = M.user_id
-                WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '1 day'
-                AND M."user_type" != 'practitioner'`);
+                WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '1 day'`);
 
             const weeklyActiveUserCount: any = await this.userModel?.sequelize?.query(
                 `SELECT COUNT(DISTINCT(U.id)) as "weeklyActiveUsers" FROM auth.users AS U
                 JOIN public.metadata as M on U.id = M.user_id
-                WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '7 day'
-                AND M."user_type" != 'practitioner'`);
+                WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '7 day'`);
 
             const monthlyActiveUserCount: any = await this.userModel?.sequelize?.query(
                 `SELECT COUNT(DISTINCT(U.id)) as "monthlyActiveUsers" FROM auth.users AS U
                 JOIN public.metadata as M on U.id = M.user_id
-                WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '30 day'
-                AND M."user_type" != 'practitioner'`);
+                WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '30 day'`);
 
             const reassessSubmittedUserCount: any = await this.userModel?.sequelize?.query(
                 `Select Count(Distinct(user_id)) as "reassessSubmittedUserCount" from public.survey_list_status 
@@ -1387,9 +1384,9 @@ export class UsersService {
                         monthlyActiveUserCount: parseInt(monthlyActiveUserCount[0][0]?.monthlyActiveUsers) || 0,
                     },
                     retentionData: {
-                        dailyRetentionPercentage: parseInt(dailyActiveUserCount[0][0]?.dailyActiveUsers),
-                        weeklyRetentionPercentage: parseInt(weeklyActiveUserCount[0][0]?.weeklyActiveUsers),
-                        monthlyRetentionPercentage: parseInt(monthlyActiveUserCount[0][0]?.monthlyActiveUsers),
+                        dailyActiveUserCount: parseInt(dailyActiveUserCount[0][0]?.dailyActiveUsers),
+                        weeklyActiveUserCount: parseInt(weeklyActiveUserCount[0][0]?.weeklyActiveUsers),
+                        monthlyActiveUserCount: parseInt(monthlyActiveUserCount[0][0]?.monthlyActiveUsers),
                     },
                     completionData: {
                         total: reassessSubmittedUserCount[0][0]?.reassessSubmittedUserCount,
@@ -1577,14 +1574,17 @@ export class UsersService {
                           FILTER (WHERE regexp_replace("A"."values"->>0, '[^0-9]', '', 'g') ~ '^[0-9]+$'), 2) AS sd_weight_kg
                 
                     FROM public.answers AS "A"
-                    WHERE "A"."question_slug" = 'personal-08-anthro-weight' AND "A"."uid" = :cycle`;
+                    WHERE "A"."question_slug" = :quesSlug AND "A"."uid" = :cycle`;
 
                 const weightInfoList: any = await this.userModel?.sequelize?.query(
                     executeWeightInfoQuery,
                     {
                         type: QueryTypes.SELECT,
                         raw: true,
-                        replacements: { cycle: 'cycle-' + i }
+                        replacements: {
+                            cycle: 'cycle-' + i,
+                            quesSlug: i === 0 ? 'personal-08-anthro-weight' : 'reassess-03-personal-08-anthro-weight'
+                        }
                     }
                 );
 
@@ -1630,7 +1630,7 @@ export class UsersService {
                     END AS weight_freq, COUNT(*) AS n,
                     ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
                     FROM public.answers AS "A"
-                    WHERE "A"."question_slug" = 'personal-11-anthro-weight-freq' AND "A"."uid" = :cycle
+                    WHERE "A"."question_slug" = :quesSlug AND "A"."uid" = :cycle
                     GROUP BY weight_freq ORDER BY weight_freq`;
 
                 const weightFreqInfoList: any = await this.userModel?.sequelize?.query(
@@ -1638,7 +1638,10 @@ export class UsersService {
                     {
                         type: QueryTypes.SELECT,
                         raw: true,
-                        replacements: { cycle: 'cycle-' + i }
+                        replacements: {
+                            cycle: 'cycle-' + i,
+                            quesSlug: i === 0 ? 'personal-11-anthro-weight-freq' : 'reassess-03-personal-11-anthro-weight-freq'
+                        }
                     }
                 );
 
@@ -1725,7 +1728,7 @@ export class UsersService {
 
             console.log(weightFreqInfoList, "---weightFreqInfoList---");
 
-            return { success: true, data: {anthropometricsData, weightFreqInfo: weightFreqInfoList}, message: 'Analytics tab 3 data fetched successfully' };
+            return { success: true, data: { anthropometricsData, weightFreqInfo: weightFreqInfoList }, message: 'Analytics tab 3 data fetched successfully' };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);
@@ -1759,7 +1762,6 @@ export class UsersService {
                     raw: true,
                 }
             );
-            console.log(adherenceModInfoList, "---adherenceModInfoList---");
 
             let executeAdherenceReassessInfoQuery = `WITH slugs AS (
                 SELECT unnest(ARRAY['reassess-02-adherence-01-food-log', 'reassess-02-adherence-02-food-log', 'reassess-02-adherence-03-videos', 'reassess-02-adherence-04-assignments', 'reassess-02-adherence-05-gems', 'reassess-02-adherence-06-links', 'reassess-02-adherence-07-recipes', 'reassess-02-adherence-08-cooking', 'reassess-02-adherence-09-meditation', 'reassess-02-adherence-10-guiding-principles']) AS slug),
@@ -1786,7 +1788,6 @@ export class UsersService {
                     raw: true,
                 }
             );
-            console.log(adherenceReassessInfoList[0].result, "---adherenceReassessInfoList---");
 
             const finalResult = {
                 adherenceModInfo: {
@@ -1822,41 +1823,57 @@ export class UsersService {
         }
     }
 
+    async normalizeReassessKeys(data): Promise<any> {
+        return data.map(cycleObj => {
+            const cycleKey = Object.keys(cycleObj)[0];
+            const cycleData = cycleObj[cycleKey];
+
+            const normalizedData = {};
+            for (const [key, value] of Object.entries(cycleData)) {
+                // remove 'reassess-03-' prefix if present
+                const newKey = key.replace(/^reassess-03-/, '');
+                normalizedData[newKey] = value;
+            }
+
+            return { [cycleKey]: normalizedData };
+        });
+    }
+
     async getAnalyticsTab5Data(): Promise<any> {
         try {
 
-            let executeFeedbackQuery = `WITH ques AS (
-                SELECT unnest(ARRAY['personal-12-health-food','personal-13-health-body','personal-14-health-cooking','personal-15-health-meditation','personal-16-health-sleep-hours','personal-17-health-sleep-qual']) AS question_slug),
-                    stats AS (
-                    SELECT q.question_slug,
-                        COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
-                        COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
-                        ROUND(100.0 * COUNT(*) FILTER (WHERE "A"."values"::text = '""') / COUNT(*), 2) AS missing_percent,
-                        ROUND(AVG(("A"."values"->>0)::numeric) 
-                            FILTER (WHERE ("A"."values"->>0) ~ '^[0-9]+$'), 2) AS mean_overall,
-                        ROUND(STDDEV(("A"."values"->>0)::numeric) 
-                            FILTER (WHERE ("A"."values"->>0) ~ '^[0-9]+$'), 2) AS sd_overall
-                    FROM ques q
-                    LEFT JOIN public.answers AS "A" ON "A"."question_slug" = q.question_slug
-                    WHERE "A"."uid" = :cycle
-                    GROUP BY q.question_slug)
-                    SELECT jsonb_object_agg(question_slug, 
-                        jsonb_build_object(
-                          'missing_count', missing_count,
-                          'total_responses', total_responses,
-                          'missing_percent', missing_percent,
-                          'mean_overall', mean_overall,
-                          'sd_overall', sd_overall
-                        )) AS result FROM stats;`
+            let executeFeedbackQuery = `WITH base_questions AS (SELECT unnest(ARRAY['personal-12-health-food','personal-13-health-body','personal-14-health-cooking','personal-15-health-meditation','personal-16-health-sleep-hours','personal-17-health-sleep-qual']) AS base_slug),
+                ques AS (SELECT CASE WHEN :cycle = 'cycle-0' THEN base_slug ELSE 'reassess-03-' || base_slug END AS question_slug
+                FROM base_questions),
+                stats AS (
+                SELECT q.question_slug,
+                    COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
+                    COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
+                    ROUND(100.0 * COUNT(*) FILTER (WHERE "A"."values"::text = '""') / NULLIF(COUNT(*), 0), 2) AS missing_percent,
+                    ROUND(AVG(("A"."values"->>0)::numeric) FILTER (WHERE ("A"."values"->>0) ~ '^[0-9]+$'), 2) AS mean_overall,
+                    ROUND(STDDEV(("A"."values"->>0)::numeric) FILTER (WHERE ("A"."values"->>0) ~ '^[0-9]+$'), 2) AS sd_overall
+                FROM ques q
+                LEFT JOIN public.answers AS "A" ON "A"."question_slug" = q.question_slug
+                AND "A"."uid" = :cycle GROUP BY q.question_slug)
+                SELECT jsonb_object_agg(
+                question_slug,
+                jsonb_build_object(
+                    'missing_count', missing_count,
+                    'total_responses', total_responses,
+                    'missing_percent', missing_percent,
+                    'mean_overall', mean_overall,
+                    'sd_overall', sd_overall
+                )
+                ) AS result FROM stats;`;
 
             let feedback: any[] = [];
             for (let i = 0; i < 5; i++) {
                 let result: any = await this.userModel?.sequelize?.query(
-                executeFeedbackQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                    replacements: { cycle: 'cycle-' + i }
+                    executeFeedbackQuery,
+                    {
+                        type: QueryTypes.SELECT,
+                        raw: true,
+                        replacements: { cycle: 'cycle-' + i }
                     }
                 );
 
@@ -1865,7 +1882,9 @@ export class UsersService {
                 })
             }
 
-            return { success: true, data: feedback, message: 'Analytics tab 5 data fetched successfully' };
+            const normalized = await this.normalizeReassessKeys(feedback);
+
+            return { success: true, data: normalized, message: 'Analytics tab 5 data fetched successfully' };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);
@@ -1960,7 +1979,10 @@ export class UsersService {
 
             return {
                 success: true, data: {
-                    baselineData: baselineData[0].result,
+                    baselineData: {
+                        ...baselineData[0].result,
+                        "intake-food-addiction": { ...baselineData[0].result["intake-fa"] }
+                    },
                     reassessData: reassessData
                 }, message: 'Analytics tab 6 data fetched successfully'
             };
@@ -2033,7 +2055,7 @@ export class UsersService {
                 }
             );
 
-            return { success: true, data: {feedback: feedback[0].result, otherFeedback:otherFeedback[0].summary, recommendations:recommendationFeedbackFeedback[0].summary}, message: 'Analytics tab 7 data fetched successfully' };
+            return { success: true, data: { feedback: feedback[0].result, otherFeedback: otherFeedback[0].summary, recommendations: recommendationFeedbackFeedback[0].summary }, message: 'Analytics tab 7 data fetched successfully' };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);

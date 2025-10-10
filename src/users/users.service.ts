@@ -1451,6 +1451,8 @@ export class UsersService {
             let executeEthnicityInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
                     WHEN 'White' THEN 'White'
                     WHEN 'Other/Mixed' THEN 'Mixed'
+                    WHEN 'Asian' THEN 'Asian'
+                    WHEN 'Hisp./Latinx' THEN 'Hispanic'
                     WHEN 'Black' THEN 'Black'
                     ELSE 'Missing'
                 END AS ethnicity, COUNT(*) AS n,
@@ -1649,15 +1651,15 @@ export class UsersService {
                     COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
                     COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
                     ROUND(100.0 * COUNT(*) FILTER (WHERE "A"."values"::text = '""') / NULLIF(COUNT(*), 0), 2) AS missing_percent,
-                  
-                    ROUND( AVG((regexp_replace("A"."values"::text, '[^0-9\.]', '', 'g')::numeric) * 0.45359237)
-                    FILTER (WHERE "A"."values"::text ~ '^[0-9]+(lbs)?$' OR "A"."values"::text ~ '^[0-9]+$'), 2) AS mean_weight_kg,
-                  
-                    ROUND( STDDEV((regexp_replace("A"."values"::text, '[^0-9\.]', '', 'g')::numeric) * 0.45359237)
-                    FILTER (WHERE "A"."values"::text ~ '^[0-9]+(lbs)?$' OR "A"."values"::text ~ '^[0-9]+$'), 2) AS sd_weight_kg
-                
-                    FROM public.answers AS "A"
-                    WHERE "A"."question_slug" = 'personal-09-anthro-weight-high' AND "A"."uid" = :cycle`;
+                    ROUND(AVG(CASE WHEN "A"."values"::text ~ '[0-9]' THEN
+                        regexp_replace("A"."values"::text, '[^0-9\.]', '', 'g')::numeric *
+                        CASE WHEN lower("A"."values"::text) LIKE '%lb%' THEN 0.45359237 ELSE 1 END ELSE NULL
+                    END), 2) AS mean_weight_kg,
+                    ROUND(STDDEV(CASE WHEN "A"."values"::text ~ '[0-9]' THEN
+                        regexp_replace("A"."values"::text, '[^0-9\.]', '', 'g')::numeric *
+                        CASE WHEN lower("A"."values"::text) LIKE '%lb%' THEN 0.45359237 ELSE 1 END ELSE NULL
+                    END), 2) AS sd_weight_kg
+                    FROM public.answers AS "A" WHERE "A"."question_slug" = 'personal-09-anthro-weight-high' AND "A"."uid" = :cycle`;
 
                 const highWeightInfoList: any = await this.userModel?.sequelize?.query(
                     executeHighWeightQuery,
@@ -1672,15 +1674,15 @@ export class UsersService {
                     COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
                     COUNT(*) FILTER (WHERE "A"."values"::text <> '""')::int AS total_responses,
                     ROUND(100.0 * COUNT(*) FILTER (WHERE "A"."values"::text = '""') / NULLIF(COUNT(*), 0), 2) AS missing_percent,
-                  
-                    ROUND( AVG((regexp_replace("A"."values"::text, '[^0-9\.]', '', 'g')::numeric) * 0.45359237)
-                    FILTER (WHERE "A"."values"::text ~ '^[0-9]+(lbs)?$' OR "A"."values"::text ~ '^[0-9]+$'), 2) AS mean_weight_kg,
-                  
-                    ROUND( STDDEV((regexp_replace("A"."values"::text, '[^0-9\.]', '', 'g')::numeric) * 0.45359237)
-                    FILTER (WHERE "A"."values"::text ~ '^[0-9]+(lbs)?$' OR "A"."values"::text ~ '^[0-9]+$'), 2) AS sd_weight_kg
-                
-                    FROM public.answers AS "A"
-                    WHERE "A"."question_slug" = 'personal-10-anthro-weight-low' AND "A"."uid" = :cycle`;
+                    ROUND(AVG(CASE WHEN "A"."values"::text ~ '[0-9]' THEN
+                        regexp_replace("A"."values"::text, '[^0-9\.]', '', 'g')::numeric *
+                        CASE WHEN lower("A"."values"::text) LIKE '%lb%' THEN 0.45359237 ELSE 1 END ELSE NULL
+                    END), 2) AS mean_weight_kg,
+                    ROUND(STDDEV(CASE WHEN "A"."values"::text ~ '[0-9]' THEN
+                        regexp_replace("A"."values"::text, '[^0-9\.]', '', 'g')::numeric *
+                        CASE WHEN lower("A"."values"::text) LIKE '%lb%' THEN 0.45359237 ELSE 1 END ELSE NULL
+                    END), 2) AS sd_weight_kg
+                    FROM public.answers AS "A" WHERE "A"."question_slug" = 'personal-10-anthro-weight-low' AND "A"."uid" = :cycle`;
 
                 const lowWeightInfoList: any = await this.userModel?.sequelize?.query(
                     executeLowWeightQuery,
@@ -1702,7 +1704,31 @@ export class UsersService {
                 })
             }
 
-            let executeWeightFreqInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
+            // let executeWeightFreqInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
+            //         WHEN '0' THEN 'Never'
+            //         WHEN '1' THEN 'Yearly'
+            //         WHEN '2' THEN 'Monthly'
+            //         WHEN '3' THEN 'Weekly'
+            //         WHEN '4' THEN 'Most Days'
+            //         WHEN '5' THEN 'Daily'
+            //         WHEN '6' THEN 'More than Daily'
+            //         ELSE 'Missing'
+            //     END AS weight_freq, COUNT(*) AS n,
+            //     ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
+            //     FROM public.answers AS "A"
+            //     WHERE "A"."question_slug" = 'personal-11-anthro-weight-freq' AND "A"."uid" = :cycle
+            //     GROUP BY weight_freq ORDER BY weight_freq`;
+
+            // const weightFreqInfoList: any = await this.userModel?.sequelize?.query(
+            //     executeWeightFreqInfoQuery,
+            //     {
+            //         type: QueryTypes.SELECT,
+            //         raw: true,
+            //         replacements: { cycle: 'cycle-0' }
+            //     }
+            // );
+
+            let executeWeightFreqReassessInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
                     WHEN '0' THEN 'Never'
                     WHEN '1' THEN 'Yearly'
                     WHEN '2' THEN 'Monthly'
@@ -1714,21 +1740,22 @@ export class UsersService {
                 END AS weight_freq, COUNT(*) AS n,
                 ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
                 FROM public.answers AS "A"
-                WHERE "A"."question_slug" = 'personal-11-anthro-weight-freq' AND "A"."uid" = :cycle
+                WHERE "A"."question_slug" = :quesSlug AND "A"."uid" = :cycle
                 GROUP BY weight_freq ORDER BY weight_freq`;
 
-            const weightFreqInfoList: any = await this.userModel?.sequelize?.query(
-                executeWeightFreqInfoQuery,
+            const weightFreqReassessInfoList: any = await this.userModel?.sequelize?.query(
+                executeWeightFreqReassessInfoQuery,
                 {
                     type: QueryTypes.SELECT,
                     raw: true,
-                    replacements: { cycle: 'cycle-0' }
+                    replacements: {
+                        cycle: 'cycle-0',
+                        quesSlug: 'reassess-03-personal-11-anthro-weight-freq'
+                    }
                 }
             );
 
-            console.log(weightFreqInfoList, "---weightFreqInfoList---");
-
-            return { success: true, data: { anthropometricsData, weightFreqInfo: weightFreqInfoList }, message: 'Analytics tab 3 data fetched successfully' };
+            return { success: true, data: { anthropometricsData, weightFreqInfo: weightFreqReassessInfoList }, message: 'Analytics tab 3 data fetched successfully' };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);
@@ -1895,10 +1922,8 @@ export class UsersService {
         try {
 
             let executeBaselineDataQuery = `WITH ques AS (
-                    SELECT SQ.question_slug, SQ.survey_slug
-                    FROM public.survey_questions AS SQ
-                    JOIN public.survey_list_surveys AS SLS
-                    ON SLS.survey_slug = SQ.survey_slug
+                    SELECT SQ.question_slug, SQ.survey_slug FROM public.survey_questions AS SQ
+                    JOIN public.survey_list_surveys AS SLS ON SLS.survey_slug = SQ.survey_slug
                     WHERE SLS.survey_list_slug = 'intake-list'
                 ),
                 stats AS (
@@ -1907,13 +1932,12 @@ export class UsersService {
                         COUNT(*) FILTER (WHERE A.values::text <> '""')::int AS total_responses,
                         ROUND(100.0 * COUNT(*) FILTER (WHERE A.values::text = '""') / COUNT(*), 2) AS missing_percent,
                         ROUND(AVG((A.values->>0)::numeric) 
-                                FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS mean_overall,
+                            FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS mean_overall,
                         ROUND(STDDEV((A.values->>0)::numeric) 
-                                FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS sd_overall
+                            FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS sd_overall
                     FROM ques q
-                    LEFT JOIN public.answers AS A
-                        ON A.question_slug = q.question_slug
-                    GROUP BY q.survey_slug
+                    LEFT JOIN public.answers AS A ON A.question_slug = q.question_slug
+                    WHERE A.uid = 'cycle-0' GROUP BY q.survey_slug
                 )
                 SELECT jsonb_object_agg(survey_slug, 
                     jsonb_build_object(
@@ -1934,10 +1958,8 @@ export class UsersService {
             let reassessData: any[] = [];
             for (let i = 1; i < 5; i++) {
                 let executeReassessDataQuery = `WITH ques AS (
-                        SELECT SQ.question_slug, SQ.survey_slug
-                        FROM public.survey_questions AS SQ
-                        JOIN public.survey_list_surveys AS SLS
-                        ON SLS.survey_slug = SQ.survey_slug
+                        SELECT SQ.question_slug, SQ.survey_slug FROM public.survey_questions AS SQ
+                        JOIN public.survey_list_surveys AS SLS ON SLS.survey_slug = SQ.survey_slug
                         WHERE SLS.survey_list_slug = 'reassess-list'
                     ),
                     stats AS (
@@ -1946,14 +1968,12 @@ export class UsersService {
                             COUNT(*) FILTER (WHERE A.values::text <> '""')::int AS total_responses,
                             ROUND(100.0 * COUNT(*) FILTER (WHERE A.values::text = '""') / COUNT(*), 2) AS missing_percent,
                             ROUND(AVG((A.values->>0)::numeric) 
-                                    FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS mean_overall,
+                                FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS mean_overall,
                             ROUND(STDDEV((A.values->>0)::numeric) 
-                                    FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS sd_overall
+                                FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS sd_overall
                         FROM ques q
-                        LEFT JOIN public.answers AS A
-                            ON A.question_slug = q.question_slug
-                        WHERE A.uid = :cycle
-                        GROUP BY q.survey_slug
+                        LEFT JOIN public.answers AS A ON A.question_slug = q.question_slug
+                        WHERE A.uid = :cycle GROUP BY q.survey_slug
                     )
                     SELECT jsonb_object_agg(survey_slug, 
                         jsonb_build_object(

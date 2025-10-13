@@ -2045,13 +2045,26 @@ export class UsersService {
                 }
             );
 
-            let executeOtherFeedbackQuery = `SELECT jsonb_build_object(
-                    'total_count', COUNT(*)::int,
-                    'missing_count', COUNT(*) FILTER (WHERE length(trim("values"::text, '"')) = 0)::int,
-                    'distinct_values', jsonb_agg(DISTINCT "values" ORDER BY "values")
-                ) AS summary
-                FROM public.answers
-                WHERE question_slug = 'reassess-01-feedback-15-other-feedback'`;
+            let executeOtherFeedbackQuery = `WITH stats AS (SELECT COUNT(*)::int AS total_count,
+                    COUNT(*) FILTER (WHERE "values" IS NULL OR trim(both '"' FROM "values"::text) = '')::int AS missing_count
+                FROM public.answers WHERE question_slug = 'reassess-01-feedback-15-other-feedback'),
+                user_summaries AS (SELECT "A"."user_id", "U"."username" AS user_name, "U"."first_name" AS first_name, "U"."last_name" AS last_name,
+                    jsonb_agg(DISTINCT "A"."values" ORDER BY "A"."values") AS distinct_values
+                FROM public.answers AS "A"
+                JOIN public.metadata AS "U" ON "U"."user_id" = "A"."user_id"
+                WHERE "A".question_slug = 'reassess-01-feedback-15-other-feedback'
+                    AND ("A"."values" IS NOT NULL AND trim(both '"' FROM "A"."values"::text) <> '')
+                GROUP BY "A"."user_id", "U"."username", "U"."first_name", "U"."last_name")
+                SELECT jsonb_build_object('total_count', (SELECT total_count FROM stats),
+                'missing_count', (SELECT missing_count FROM stats),
+                'summary', COALESCE(jsonb_agg(jsonb_build_object(
+                    'user_id', user_summaries.user_id,
+                    'user_name', user_summaries.user_name,
+                    'first_name', user_summaries.first_name,
+                    'last_name', user_summaries.last_name,
+                    'distinct_values', user_summaries.distinct_values
+                    )
+                ), '[]'::jsonb)) AS result FROM user_summaries`;
             const otherFeedback: any = await this.userModel?.sequelize?.query(
                 executeOtherFeedbackQuery,
                 {
@@ -2060,13 +2073,26 @@ export class UsersService {
                 }
             );
 
-            let executeRecommendationFeedbackQuery = `SELECT jsonb_build_object(
-                    'total_count', COUNT(*)::int,
-                    'missing_count', COUNT(*) FILTER (WHERE length(trim("values"::text, '"')) = 0)::int,
-                    'distinct_values', jsonb_agg(DISTINCT "values" ORDER BY "values")
-                ) AS summary
-                FROM public.answers
-                WHERE question_slug = 'reassess-01-feedback-16-recommendations'`;
+            let executeRecommendationFeedbackQuery = `WITH stats AS (SELECT COUNT(*)::int AS total_count,
+                    COUNT(*) FILTER (WHERE "values" IS NULL OR trim(both '"' FROM "values"::text) = '')::int AS missing_count
+                FROM public.answers WHERE question_slug = 'reassess-01-feedback-16-recommendations'),
+                user_summaries AS (SELECT "A"."user_id", "U"."username" AS user_name, "U"."first_name" AS first_name, "U"."last_name" AS last_name,
+                    jsonb_agg(DISTINCT "A"."values" ORDER BY "A"."values") AS distinct_values
+                FROM public.answers AS "A"
+                JOIN public.metadata AS "U" ON "U"."user_id" = "A"."user_id"
+                WHERE "A".question_slug = 'reassess-01-feedback-16-recommendations'
+                    AND ("A"."values" IS NOT NULL AND trim(both '"' FROM "A"."values"::text) <> '')
+                GROUP BY "A"."user_id", "U"."username", "U"."first_name", "U"."last_name")
+                SELECT jsonb_build_object('total_count', (SELECT total_count FROM stats),
+                'missing_count', (SELECT missing_count FROM stats),
+                'summary', COALESCE(jsonb_agg(jsonb_build_object(
+                    'user_id', user_summaries.user_id,
+                    'user_name', user_summaries.user_name,
+                    'first_name', user_summaries.first_name,
+                    'last_name', user_summaries.last_name,
+                    'distinct_values', user_summaries.distinct_values
+                    )
+                ), '[]'::jsonb)) AS result FROM user_summaries`;
             const recommendationFeedbackFeedback: any = await this.userModel?.sequelize?.query(
                 executeRecommendationFeedbackQuery,
                 {
@@ -2075,7 +2101,15 @@ export class UsersService {
                 }
             );
 
-            return { success: true, data: { feedback: feedback[0].result, otherFeedback: otherFeedback[0].summary, recommendations: recommendationFeedbackFeedback[0].summary }, message: 'Analytics tab 7 data fetched successfully' };
+            return {
+                success: true,
+                data: {
+                    feedback: feedback[0].result,
+                    otherFeedback: otherFeedback[0].result,
+                    recommendations: recommendationFeedbackFeedback[0].result
+                },
+                message: 'Analytics tab 7 data fetched successfully'
+            };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);

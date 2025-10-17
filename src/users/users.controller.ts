@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { FilterDto, FoodLogsFilterDto, IResponse } from './dto/filter.dto';
 import { AuthGuard } from 'src/guards/authgaurd';
@@ -9,20 +9,31 @@ export class UsersController {
 
     constructor(private readonly usersService: UsersService) {}
 
+    @UseGuards(AuthGuard)
+    @Get('/dashboard/get-user-count')
+    async getDashboardUserCount(
+        @Query('practitionerId') practitionerId: string
+    ) {
+        return this.usersService.getDashboardUserCount(practitionerId);
+    }
+
     @Post('/get/:userType/:pageNumber/:pageSize')
     async fetchAllUsersList(
         @Param('userType') userType: string,
         @Param('pageNumber') pageNumber: number,
         @Param('pageSize') pageSize: number,
-        @Body() filters: FilterDto
+        @Body() filters: FilterDto,
+        @Query('practitionerId') practitionerId: string
     ): Promise<IResponse> {
-        return this.usersService.findAllUsersList(userType, pageNumber, pageSize, filters);
+        return this.usersService.findAllUsersList(userType, pageNumber, pageSize, filters, practitionerId);
     }
 
     @UseGuards(AuthGuard)
     @Get('/pro-user-count')
-    async getProUserCount() {
-        return this.usersService.getProUserCount();
+    async getProUserCount(
+        @Query('practitionerId') practitionerId: string
+    ) {
+        return this.usersService.getProUserCount(practitionerId);
     }
 
     @UseGuards(AuthGuard)

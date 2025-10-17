@@ -17,7 +17,7 @@ export class UsersService {
         return this.userModel.findAll();
     }
 
-    async findAllUsersList(userType: string, pageNumber: number, pageSize: number, filters: FilterDto): Promise<IResponse> {
+    async findAllUsersList(userType: string, pageNumber: number, pageSize: number, filters: FilterDto, practitionerId: string): Promise<IResponse> {
         try {
             const { searchTerm, sortBy, sortOrder, selectedRole, gift, unsubscribed } = filters;
 
@@ -45,6 +45,10 @@ export class UsersService {
                 executeCountQuery += ` AND M.user_type = 'practitioner'`;
             }
 
+            if (practitionerId) {
+                executeDataQuery += ` AND M.practitioner_id = :practitionerId`;
+                executeCountQuery += ` AND M.practitioner_id = :practitionerId`;
+            }
 
             // if (trial && trial.toString() === 'true') {
             //     executeDataQuery += ` AND M.trial = true`;
@@ -87,24 +91,30 @@ export class UsersService {
 
             executeDataQuery += ` LIMIT :pageSize OFFSET :offset`;
 
-            const users = await this.userModel?.sequelize?.query(
-                executeDataQuery,
+            let filterOpts = {
+                pageSize: pageSize,
+                offset: (pageNumber - 1) * pageSize,
+            }
+            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+                filterOpts['practitionerId'] = practitionerId;
+            }
+            const users = await this.userModel?.sequelize?.query(executeDataQuery,
                 {
                     type: QueryTypes.SELECT,
                     raw: true,
-                    replacements: {
-                        pageSize: pageSize,
-                        offset: (pageNumber - 1) * pageSize,
-                    },
+                    replacements: { ...filterOpts },
                 }
             );
 
+            let queryOpts = {
+                type: QueryTypes.SELECT,
+                raw: true,
+            }
+            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+                queryOpts['replacements'] = { practitionerId: practitionerId };
+            }
             const totalCount: any = await this.userModel?.sequelize?.query(executeCountQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                }
-            );
+                { ...queryOpts });
 
             return {
                 success: true, data: {
@@ -1199,36 +1209,90 @@ export class UsersService {
         }
     }
 
-    async getProUserCount(): Promise<any> {
+    async getProUserCount(practitionerId: string): Promise<any> {
         try {
-            const proUserCount: any = await this.userModel?.sequelize?.query(
-                `SELECT COUNT(DISTINCT(M.user_id)) as "proUserCount" FROM public.metadata AS M
-                WHERE M."user_type" != 'practitioner' AND M."plan" NOT IN ('free', 'trial', 'dev')`);
+            let queryOpts = {
+                type: QueryTypes.SELECT,
+                raw: true,
+            }
+            let proUserCountQuery = `SELECT COUNT(DISTINCT(M.user_id)) as "proUserCount" FROM public.metadata AS M
+                WHERE M."user_type" != 'practitioner' AND M."plan" NOT IN ('free', 'trial', 'dev')`;
+            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+                proUserCountQuery += ` AND M.practitioner_id = :practitionerId`;
+                queryOpts['replacements'] = { practitionerId: practitionerId };
+            }
+            const proUserCount: any = await this.userModel?.sequelize?.query(proUserCountQuery, { ...queryOpts });
 
-            const activeUserCount: any = await this.userModel?.sequelize?.query(
-                `SELECT COUNT(DISTINCT(U.id)) as "activeUserCount" FROM auth.users AS U WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '28 day'`);
+            let activeUserCountQuery = `SELECT COUNT(DISTINCT(U.id)) as "activeUserCount" FROM auth.users AS U
+                JOIN public.metadata as M ON U.id = M.user_id
+                WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '28 day'`;
+            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+                activeUserCountQuery += ` AND M.practitioner_id = :practitionerId`;
+                queryOpts['replacements'] = { practitionerId: practitionerId };
+            }
+            const activeUserCount: any = await this.userModel?.sequelize?.query(activeUserCountQuery, { ...queryOpts });
 
-            const onboardedUserCount: any = await this.userModel?.sequelize?.query(
-                `SELECT COUNT(DISTINCT(M.user_id)) as "onboardedUserCount" FROM public.metadata AS M
-                WHERE M."onboarded" = true`);
+            let onboardedUserCountQuery = `SELECT COUNT(DISTINCT(M.user_id)) as "onboardedUserCount" FROM public.metadata AS M
+                WHERE M."onboarded" = true`;
+            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+                onboardedUserCountQuery += ` AND M.practitioner_id = :practitionerId`;
+                queryOpts['replacements'] = { practitionerId: practitionerId };
+            }
+            const onboardedUserCount: any = await this.userModel?.sequelize?.query(onboardedUserCountQuery, { ...queryOpts });
 
-            const newCustomerCount: any = await this.userModel?.sequelize?.query(
-                `SELECT COUNT(id) AS "newCustomerCount" FROM auth.users
-                WHERE created_at >= NOW() - INTERVAL '28 days'`);
+            let newCustomerCountQuery = `SELECT COUNT(id) AS "newCustomerCount" FROM auth.users AS U
+                JOIN public.metadata as M ON U.id = M.user_id
+                WHERE U.created_at >= NOW() - INTERVAL '28 days'`;
+            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+                newCustomerCountQuery += ` AND M.practitioner_id = :practitionerId`;
+                queryOpts['replacements'] = { practitionerId: practitionerId };
+            }
+            const newCustomerCount: any = await this.userModel?.sequelize?.query(newCustomerCountQuery, { ...queryOpts });
 
-            const newPractitionerCount: any = await this.userModel?.sequelize?.query(
-                `SELECT COUNT(id) AS "newPractitionerCount" FROM auth.users as U
+            const newPractitionerCount: any = await this.userModel?.sequelize?.query(`SELECT COUNT(DISTINCT(U.id)) AS "newPractitionerCount" FROM auth.users as U
                 JOIN public.metadata as M ON U.id = M.user_id
                 WHERE M."user_type" = 'practitioner' AND U.created_at >= NOW() - INTERVAL '28 days'`);
 
             return {
                 success: true, data: {
-                    proUserCount: proUserCount[0][0]?.proUserCount || 0,
-                    activeUserCount: activeUserCount[0][0]?.activeUserCount || 0,
-                    onboardedUserCount: onboardedUserCount[0][0]?.onboardedUserCount || 0,
-                    newCustomerCount: newCustomerCount[0][0]?.newCustomerCount || 0,
-                    newPractitionerCount: newPractitionerCount[0][0]?.newPractitionerCount || 0
+                    proUserCount: parseInt(proUserCount[0]?.proUserCount) || 0,
+                    activeUserCount: parseInt(activeUserCount[0]?.activeUserCount) || 0,
+                    onboardedUserCount: parseInt(onboardedUserCount[0]?.onboardedUserCount) || 0,
+                    newCustomerCount: parseInt(newCustomerCount[0]?.newCustomerCount) || 0,
+                    newPractitionerCount: parseInt(newPractitionerCount[0][0]?.newPractitionerCount) || 0
                 }, message: 'Pro user count fetched successfully'
+            };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
+    async getDashboardUserCount(practitionerId: string): Promise<any> {
+        try {
+            let queryOpts = {
+                type: QueryTypes.SELECT,
+                raw: true,
+            }
+            let patientCountQuery = `SELECT COUNT(*) as count FROM auth.users as U
+                JOIN public.metadata AS M on U.id = M.user_id
+                WHERE U.last_seen IS NOT NULL AND M."user_type" != 'practitioner'`;
+            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+                patientCountQuery += ` AND M.practitioner_id = :practitionerId`;
+                queryOpts['replacements'] = { practitionerId: practitionerId };
+            }
+            const patientCount: any = await this.userModel?.sequelize?.query(patientCountQuery, { ...queryOpts });
+
+            let practitionerCountQuery = `SELECT COUNT(DISTINCT(U.id)) as "practitionerCount" FROM auth.users AS U
+                JOIN public.metadata as M ON U.id = M.user_id
+                WHERE U.last_seen IS NOT NULL AND M."user_type" = 'practitioner'`;
+            const practitionerCount: any = await this.userModel?.sequelize?.query(practitionerCountQuery, { ...queryOpts });
+
+            return {
+                success: true, data: {
+                    patientCount: parseInt(patientCount[0]?.count) || 0,
+                    practitionerCount: parseInt(practitionerCount[0]?.practitionerCount) || 0,
+                }, message: 'Dashboard user count fetched successfully'
             };
         } catch (error) {
             console.error(error, "---error---");

@@ -1283,7 +1283,7 @@ export class UsersService {
                 queryOpts['replacements'] = { practitionerId: practitionerId };
             }
             const patientCount: any = await this.userModel?.sequelize?.query(patientCountQuery, { ...queryOpts });
-console.log(patientCount, "---patientCount---1285");
+
             let practitionerCountQuery = `SELECT COUNT(DISTINCT(U.id)) as "practitionerCount" FROM auth.users AS U
                 JOIN public.metadata as M ON U.id = M.user_id
                 WHERE U.last_seen IS NOT NULL AND M."user_type" = 'practitioner'`;

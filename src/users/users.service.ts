@@ -2212,7 +2212,7 @@ export class UsersService {
             }
 
             // ✅ Step 5: Validate required columns
-            const requiredKeys = ['First Name', 'Last Name', 'Email'];
+            const requiredKeys = ['firstName', 'lastName', 'email'];
             const headers = Object.keys(data[0] || {}).map(h => h.trim());
 
             const missingKeys = requiredKeys.filter(key => !headers.includes(key));

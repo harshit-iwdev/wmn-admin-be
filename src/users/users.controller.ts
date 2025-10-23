@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { FilterDto, FoodLogsFilterDto, IResponse } from './dto/filter.dto';
 import { AuthGuard } from 'src/guards/authgaurd';
 import { User } from 'src/models';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 @Controller('users')
 export class UsersController {
@@ -158,6 +159,17 @@ export class UsersController {
     @Get('/analytics/feedback')
     async getAnalyticsTab7Data() {
         return this.usersService.getAnalyticsTab7Data();
+    }
+
+    @UseGuards(AuthGuard)
+    @Post('/import-users-from-csv')
+    @UseInterceptors(FileInterceptor('csvFile'))
+    async importUsersFromCsv(
+        @UploadedFile() csvFile: Express.Multer.File,
+        @Body() body: any
+    ) {
+        console.log(csvFile, "---csvFile and body---");
+        return this.usersService.importUsersFromCsv(csvFile, body);
     }
 
 }

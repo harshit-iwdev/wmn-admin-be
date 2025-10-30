@@ -1986,32 +1986,54 @@ export class UsersService {
     async getAnalyticsTab6Data(): Promise<any> {
         try {
 
-            let executeBaselineDataQuery = `WITH ques AS (
-                    SELECT SQ.question_slug, SQ.survey_slug FROM public.survey_questions AS SQ
-                    JOIN public.survey_list_surveys AS SLS ON SLS.survey_slug = SQ.survey_slug
-                    WHERE SLS.survey_list_slug = 'intake-list'
-                ),
-                stats AS (
-                    SELECT q.survey_slug,
-                        COUNT(*) FILTER (WHERE A.values::text = '""')::int AS missing_count,
+            // let executeBaselineDataQuery = `WITH ques AS (
+            //         SELECT SQ.question_slug, SQ.survey_slug FROM public.survey_questions AS SQ
+            //         JOIN public.survey_list_surveys AS SLS ON SLS.survey_slug = SQ.survey_slug
+            //         WHERE SLS.survey_list_slug = 'intake-list'
+            //     ),
+            //     stats AS (
+            //         SELECT q.survey_slug,
+            //             COUNT(*) FILTER (WHERE A.values::text = '""')::int AS missing_count,
+            //             COUNT(*) FILTER (WHERE A.values::text <> '""')::int AS total_responses,
+            //             ROUND(100.0 * COUNT(*) FILTER (WHERE A.values::text = '""') / COUNT(*), 2) AS missing_percent,
+            //             ROUND(AVG((A.values->>0)::numeric) 
+            //                 FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS mean_overall,
+            //             ROUND(STDDEV((A.values->>0)::numeric) 
+            //                 FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS sd_overall
+            //         FROM ques q
+            //         LEFT JOIN public.answers AS A ON A.question_slug = q.question_slug
+            //         WHERE A.uid = 'cycle-0' GROUP BY q.survey_slug
+            //     )
+            //     SELECT jsonb_object_agg(survey_slug, 
+            //         jsonb_build_object(
+            //             'missing_count', missing_count,
+            //             'total_responses', total_responses,
+            //             'missing_percent', missing_percent,
+            //             'mean_overall', mean_overall,
+            //             'sd_overall', sd_overall
+            //         )) AS result FROM stats;`
+
+            let executeBaselineDataQuery = `WITH question_stats AS (SELECT 
+                        SQ.survey_slug, COUNT(*) FILTER (WHERE A.values::text = '""')::int AS missing_count,
                         COUNT(*) FILTER (WHERE A.values::text <> '""')::int AS total_responses,
-                        ROUND(100.0 * COUNT(*) FILTER (WHERE A.values::text = '""') / COUNT(*), 2) AS missing_percent,
-                        ROUND(AVG((A.values->>0)::numeric) 
-                            FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS mean_overall,
-                        ROUND(STDDEV((A.values->>0)::numeric) 
-                            FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS sd_overall
-                    FROM ques q
-                    LEFT JOIN public.answers AS A ON A.question_slug = q.question_slug
-                    WHERE A.uid = 'cycle-0' GROUP BY q.survey_slug
-                )
-                SELECT jsonb_object_agg(survey_slug, 
-                    jsonb_build_object(
-                        'missing_count', missing_count,
-                        'total_responses', total_responses,
-                        'missing_percent', missing_percent,
-                        'mean_overall', mean_overall,
-                        'sd_overall', sd_overall
-                    )) AS result FROM stats;`
+                        ROUND(100.0 * COUNT(*) FILTER (WHERE A.values::text = '""') / NULLIF(COUNT(*), 0), 2) AS missing_percent,
+                        ROUND(AVG((A.values->>0)::numeric) FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS mean_overall,
+                        ROUND(STDDEV((A.values->>0)::numeric) FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS sd_overall
+                    FROM public.questions AS q
+                    LEFT JOIN public.answers AS A ON A.question_slug = q.slug
+                    LEFT JOIN public.survey_questions AS SQ ON SQ.question_slug = q.slug
+                    LEFT JOIN public.survey_list_surveys AS SLS ON SLS.survey_slug = SQ.survey_slug
+                    WHERE A.uid = 'cycle-0' AND SLS.survey_list_slug = 'intake-list'
+                    GROUP BY q.slug, SQ.survey_slug
+                ),
+                survey_aggregated AS (SELECT survey_slug, MAX(total_responses) AS total_responses, SUM(missing_count) AS missing_count,
+                    ROUND(AVG(missing_percent), 2) AS missing_percent, ROUND(AVG(mean_overall), 2) AS mean_overall,
+                    ROUND(AVG(sd_overall), 2) AS sd_overall FROM question_stats GROUP BY survey_slug)
+                SELECT jsonb_object_agg(survey_slug, jsonb_build_object(
+                    'total_responses', total_responses, 'missing_count', missing_count,
+                    'missing_percent', missing_percent, 'mean_overall', mean_overall,
+                    'sd_overall', sd_overall)) AS result
+                FROM survey_aggregated`;
             const baselineData: any = await this.userModel?.sequelize?.query(
                 executeBaselineDataQuery,
                 {

@@ -2026,7 +2026,7 @@ export class UsersService {
                     WHERE A.uid = 'cycle-0' AND SLS.survey_list_slug = 'intake-list'
                     GROUP BY q.slug, SQ.survey_slug
                 ),
-                survey_aggregated AS (SELECT survey_slug, MAX(total_responses) AS total_responses, SUM(missing_count) AS missing_count,
+                survey_aggregated AS (SELECT survey_slug, MIN(total_responses) AS total_responses, SUM(missing_count) AS missing_count,
                     ROUND(AVG(missing_percent), 2) AS missing_percent, ROUND(AVG(mean_overall), 2) AS mean_overall,
                     ROUND(AVG(sd_overall), 2) AS sd_overall FROM question_stats GROUP BY survey_slug)
                 SELECT jsonb_object_agg(survey_slug, jsonb_build_object(

@@ -1390,26 +1390,71 @@ export class UsersService {
         }
     }
 
-    async fetchUserDataForPdf(): Promise<any> {
+    async fetchUserDataForPdf(filters: FilterDto, practitionerId: string): Promise<any> {
         try {
-            let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as userMetadata, to_jsonb(S) as userSettings, to_jsonb(FL) as userFoodLogs, to_jsonb(I) as userIntentions, to_jsonb(P) as userPins, to_jsonb(R) as userReviews FROM auth.users as U 
-                join public.metadata as M on U.id = M.user_id
-                join public.settings as S on U.id = S."user_id"
-                left join public.food_logs as FL on U.id = FL."userId"
-                left join public.intentions as I on U.id = I."user_id"
-                left join public.pins as P on U.id = P."user_id"
-                left join public.reviews as R on U.id = R."user_id"
-                where U.last_seen IS NOT NULL ORDER BY U.last_seen DESC`;
+            const { searchTerm, sortBy, sortOrder, selectedRole, gift, unsubscribed } = filters;
 
-            const userData: any = await this.userModel?.sequelize?.query(
-                executeDataQuery,
+            let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as userMetadata,
+                COALESCE(followers.follower_count, 0) AS "followerCount",
+                COALESCE(following.following_count, 0) AS "followingCount"
+                FROM auth.users as U 
+                join public.metadata as M on U.id = M.user_id
+                LEFT JOIN (SELECT "follow_user_id" AS id, COUNT(*) AS follower_count
+                FROM public.user_follows GROUP BY "follow_user_id") AS followers ON followers.id = U.id
+                LEFT JOIN (SELECT "user_id" AS id, COUNT(*) AS following_count
+                FROM public.user_follows GROUP BY "user_id") AS following ON following.id = U.id
+                where U.last_seen IS NOT NULL`;
+
+            if (searchTerm) {
+                executeDataQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
+            }
+
+            if (practitionerId) {
+                executeDataQuery += ` AND M.practitioner_id = :practitionerId`;
+            }
+
+            if (gift && gift.toString() === 'true') {
+                executeDataQuery += ` AND M.gift = true`;
+            } else if (gift && gift.toString() === 'false') {
+                executeDataQuery += ` AND M.gift = false`;
+            }
+
+            if (unsubscribed && unsubscribed.toString() === 'true') {
+                executeDataQuery += ` AND M.unsubscribed = true`;
+            } else if (unsubscribed && unsubscribed.toString() === 'false') {
+                executeDataQuery += ` AND M.unsubscribed = false`;
+            }
+
+            if (selectedRole === 'practitioner') {
+                executeDataQuery += ` AND M.user_type = 'practitioner'`;
+            }
+
+            if (sortBy && sortOrder) {
+                if (sortBy === 'last_seen' || sortBy === 'email') {
+                    executeDataQuery += ` ORDER BY U.${sortBy} ${sortOrder}`;
+                } else if (sortBy === 'first_name' || sortBy === 'last_name' || sortBy === 'username' || sortBy === 'cycle' || sortBy === 'pro_day' || sortBy === 'plan' || sortBy === 'renewalNumber' || sortBy === 'revCatTrial') {
+                    executeDataQuery += ` ORDER BY M."${sortBy}" ${sortOrder}`;
+                }
+            } else {
+                executeDataQuery += ` ORDER BY U.last_seen DESC`;
+            }
+
+            let filterOpts = {};
+            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+                filterOpts['practitionerId'] = practitionerId;
+            }
+            const users = await this.userModel?.sequelize?.query(executeDataQuery,
                 {
                     type: QueryTypes.SELECT,
                     raw: true,
+                    replacements: { ...filterOpts },
                 }
             );
 
-            return { success: true, data: userData, message: 'User data fetched successfully' };
+            return {
+                success: true, data: users,
+                message: 'Users fetched successfully',
+            };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);

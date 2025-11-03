@@ -38,9 +38,12 @@ export class UsersController {
     }
 
     @UseGuards(AuthGuard)
-    @Get('/user-data-for-pdf')
-    async fetchUserDataForPdf() {
-        return this.usersService.fetchUserDataForPdf();
+    @Post('/user-data-for-pdf')
+    async fetchUserDataForPdf(
+        @Body() filters: FilterDto,
+        @Query('practitionerId') practitionerId: string,
+    ) {
+        return this.usersService.fetchUserDataForPdf(filters, practitionerId);
     }
 
     @UseGuards(AuthGuard)

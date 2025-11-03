@@ -2,7 +2,7 @@ import { Request } from 'express';
 import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 // import { SignupDto } from './dto/signup';
-import { SigninDto } from './dto/signin';
+import { PractitionerLoginDto, PractitionerLoginLinkVerificationDto, SigninDto } from './dto/signin';
 import { ForgotPasswordDto } from './dto/forgotPassword';
 import { VerifyOtpDto } from './dto/verifyOtp';
 import { AuthGuard } from 'src/guards/authgaurd';
@@ -20,6 +20,18 @@ export class AuthController {
   @Post('sign-in')
   async signIn(@Body() payload: SigninDto) {
     return await this.authService.signin(payload);
+  }
+
+  @Public()
+  @Post('practitioner-login')
+  async practitionerLogin(@Body() payload: PractitionerLoginDto) {
+    return await this.authService.practitionerSignIn(payload);
+  }
+
+  @Public()
+  @Post('practitioner-login-verification')
+  async practitionerLoginVerification(@Body() payload: PractitionerLoginLinkVerificationDto) {
+    return await this.authService.practitionerLoginVerification(payload);
   }
 
   @Post('forgot-password')

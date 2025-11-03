@@ -1340,6 +1340,31 @@ export class UsersService {
         }
     }
 
+    async sendPractitionerLoginEmail(practitionerName: string, email: string): Promise<any> {
+        try {
+            const timestamp = new Date().getTime();
+            await this.sendEmail({
+                to: email,
+                subject: 'Practitioner Login Notification',
+                html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <h2 style="color: #6b46c1;">Welcome to Wise Mind Nutrition!</h2>
+                  <p>Hello ${practitionerName},</p>
+                  <p>Log in to your account as practitioner to view the user's details.</p>
+                  <p>Click the button below to log in:</p>
+                  <a href="${process.env.NEXT_PUBLIC_FE_DOMAIN}/practitioners/login?timestamp=${timestamp}&email=${email}">
+                    <button style="background-color: #6b46c1; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; cursor: pointer;">Login</button>
+                  </a>
+                  <p>Best regards,<br>The Wise Mind Nutrition Team</p>
+                </div>
+              `,
+            });
+        } catch (error) {
+            console.error(error, 'Email sending error');
+            throw new BadRequestException(error.message || error);
+        }
+    }
+
     async sendEmail(options: { to: string; subject: string; html: string; text?: string }) {
         const mailOptions = {
             from: process.env.NEXT_PUBLIC_SMTP_USER || 'noreply@yourdomain.com',

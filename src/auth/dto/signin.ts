@@ -13,3 +13,24 @@ export class SigninDto {
   // @ApiProperty()
   password: string;
 }
+
+export class PractitionerLoginDto {
+  @IsEmail()
+  @IsNotEmpty()
+  // @ApiProperty()
+  email: string;
+
+}
+
+export class PractitionerLoginLinkVerificationDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(15)
+  // @ApiProperty()
+  timestamp: string;
+
+  @IsEmail()
+  @IsNotEmpty()
+  // @ApiProperty()
+  email: string;
+}

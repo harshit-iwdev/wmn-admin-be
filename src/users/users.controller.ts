@@ -39,11 +39,11 @@ export class UsersController {
 
     @UseGuards(AuthGuard)
     @Post('/user-data-for-pdf')
-    async fetchUserDataForPdf(
+    async fetchUsersDataForPdf(
         @Body() filters: FilterDto,
         @Query('practitionerId') practitionerId: string,
     ) {
-        return this.usersService.fetchUserDataForPdf(filters, practitionerId);
+        return this.usersService.fetchUsersDataForPdf(filters, practitionerId);
     }
 
     @UseGuards(AuthGuard)

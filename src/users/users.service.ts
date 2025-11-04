@@ -4,7 +4,6 @@ import { User } from '../models';
 import { QueryTypes } from 'sequelize';
 import { FilterDto, FoodLogsFilterDto, IResponse } from './dto/filter.dto';
 import { Resend } from 'resend';
-// import * as fs from 'fs';
 import * as XLSX from 'xlsx';
 
 @Injectable()
@@ -1390,7 +1389,7 @@ export class UsersService {
         }
     }
 
-    async fetchUserDataForPdf(filters: FilterDto, practitionerId: string): Promise<any> {
+    async fetchUsersDataForPdf(filters: FilterDto, practitionerId: string): Promise<any> {
         try {
             const { searchTerm, sortBy, sortOrder, selectedRole, gift, unsubscribed } = filters;
 
@@ -2373,24 +2372,24 @@ export class UsersService {
                     if (newUser.success) {
                         console.log(`User ${email} created successfully`);
     
-                        let metadataCreateQuery = `INSERT INTO public.metadata (user_id, first_name, last_name, user_type, pro_day, cycle, gift, updated_at) 
-                            VALUES (:userId, :first_name, :last_name, :user_type, :pro_day, :cycle, :gift, :updatedAt)`;
-                        const metadataCreate: any = await this.userModel?.sequelize?.query(metadataCreateQuery, {
-                            type: QueryTypes.INSERT,
-                            raw: true,
-                            replacements: {
-                                userId: newUser.data.id,
-                                first_name: element.firstName,
-                                last_name: element.lastName,
-                                user_type: body.userType,
-                                pro_day: 0,
-                                cycle: 0,
-                                gift: body.isGift === 'true' ? true : false,
-                                updated_at: new Date()
-                            }
-                        });
-                        console.log(metadataCreate, "---metadataCreate---");
-                        console.log(`Metadata for user ${email} created successfully`);
+                        // let metadataCreateQuery = `INSERT INTO public.metadata (user_id, first_name, last_name, user_type, pro_day, cycle, gift, updated_at) 
+                        //     VALUES (:userId, :first_name, :last_name, :user_type, :pro_day, :cycle, :gift, :updatedAt)`;
+                        // const metadataCreate: any = await this.userModel?.sequelize?.query(metadataCreateQuery, {
+                        //     type: QueryTypes.INSERT,
+                        //     raw: true,
+                        //     replacements: {
+                        //         userId: newUser.data.id,
+                        //         first_name: element.firstName,
+                        //         last_name: element.lastName,
+                        //         user_type: body.userType,
+                        //         pro_day: 0,
+                        //         cycle: 0,
+                        //         gift: body.isGift === 'true' ? true : false,
+                        //         updated_at: new Date()
+                        //     }
+                        // });
+                        // console.log(metadataCreate, "---metadataCreate---");
+                        // console.log(`Metadata for user ${email} created successfully`);
                     }
                 } catch (userError) {
                     console.error(`Failed to create user ${email}:`, userError.message);

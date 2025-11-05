@@ -52,14 +52,6 @@ export class UsersService {
                 executeCountQuery += ` WHERE U.last_seen IS NOT NULL`;
             }
 
-            // if (trial && trial.toString() === 'true') {
-            //     executeDataQuery += ` AND M.trial = true`;
-            //     executeCountQuery += ` AND M.trial = true`;
-            // } else if (trial && trial.toString() === 'false') {
-            //     executeDataQuery += ` AND M.trial = false`;
-            //     executeCountQuery += ` AND M.trial = false`;
-            // }
-
             if (gift && gift.toString() === 'true') {
                 executeDataQuery += ` AND M.gift = true`;
                 executeCountQuery += ` AND M.gift = true`;
@@ -325,13 +317,9 @@ export class UsersService {
                 );
                 lastArchiveEndDate = userCreationDate[0]?.createdAt;
                 basicStartDate = lastArchiveEndDate;
-                // basicStartDate = new Date(lastArchiveEndDate);
                 basicStartDate.setDate(basicStartDate.getDate());
             }
             if (startDate.length === 0 && endDate.length === 0) {
-                // startDate = await this.formatDateLocal(lastArchiveEndDate);
-                // endDate = await this.formatDateLocal(new Date());
-
                 startDate = lastArchiveEndDate;
                 endDate = new Date().toISOString();
             }
@@ -1404,15 +1392,17 @@ export class UsersService {
                 LEFT JOIN (SELECT "follow_user_id" AS id, COUNT(*) AS follower_count
                 FROM public.user_follows GROUP BY "follow_user_id") AS followers ON followers.id = U.id
                 LEFT JOIN (SELECT "user_id" AS id, COUNT(*) AS following_count
-                FROM public.user_follows GROUP BY "user_id") AS following ON following.id = U.id
-                where U.last_seen IS NOT NULL`;
+                FROM public.user_follows GROUP BY "user_id") AS following ON following.id = U.id`;
 
             if (searchTerm) {
                 executeDataQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
             }
 
-            if (practitionerId) {
-                executeDataQuery += ` AND M.practitioner_id = :practitionerId`;
+            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+                executeDataQuery += ` JOIN public.user_follows AS UF ON U.id = UF."follow_user_id"
+                WHERE U.last_seen IS NOT NULL AND UF."user_id" = :practitionerId`;
+            } else {
+                executeDataQuery += ` WHERE U.last_seen IS NOT NULL`;
             }
 
             if (gift && gift.toString() === 'true') {
@@ -1959,30 +1949,6 @@ export class UsersService {
                     }
                 })
             }
-
-            // let executeWeightFreqInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
-            //         WHEN '0' THEN 'Never'
-            //         WHEN '1' THEN 'Yearly'
-            //         WHEN '2' THEN 'Monthly'
-            //         WHEN '3' THEN 'Weekly'
-            //         WHEN '4' THEN 'Most Days'
-            //         WHEN '5' THEN 'Daily'
-            //         WHEN '6' THEN 'More than Daily'
-            //         ELSE 'Missing'
-            //     END AS weight_freq, COUNT(*) AS n,
-            //     ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
-            //     FROM public.answers AS "A"
-            //     WHERE "A"."question_slug" = 'personal-11-anthro-weight-freq' AND "A"."uid" = :cycle
-            //     GROUP BY weight_freq ORDER BY weight_freq`;
-
-            // const weightFreqInfoList: any = await this.userModel?.sequelize?.query(
-            //     executeWeightFreqInfoQuery,
-            //     {
-            //         type: QueryTypes.SELECT,
-            //         raw: true,
-            //         replacements: { cycle: 'cycle-0' }
-            //     }
-            // );
 
             let executeWeightFreqReassessInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
                     WHEN '0' THEN 'Never'
@@ -2549,5 +2515,123 @@ export class UsersService {
         }
     }
 
+
+    async fetchAdminCsvData(userType: string, filters: FilterDto): Promise<any> {
+        try {
+
+            let userIds : string[] = [];
+            const { searchTerm, sortBy, sortOrder, selectedRole, gift, unsubscribed } = filters;
+
+            let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as userMetadata,
+                COALESCE(followers.follower_count, 0) AS "followerCount",
+                COALESCE(following.following_count, 0) AS "followingCount"
+                FROM auth.users as U 
+                join public.metadata as M on U.id = M.user_id
+                LEFT JOIN (SELECT "follow_user_id" AS id, COUNT(*) AS follower_count
+                FROM public.user_follows GROUP BY "follow_user_id") AS followers ON followers.id = U.id
+                LEFT JOIN (SELECT "user_id" AS id, COUNT(*) AS following_count
+                FROM public.user_follows GROUP BY "user_id") AS following ON following.id = U.id 
+                WHERE U.last_seen IS NOT NULL`;
+
+            if (searchTerm) {
+                executeDataQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
+            }
+
+            if (userType === 'practitioner') {
+                executeDataQuery += ` AND M.user_type = 'practitioner'`;
+            }
+
+            if (gift && gift.toString() === 'true') {
+                executeDataQuery += ` AND M.gift = true`;
+            } else if (gift && gift.toString() === 'false') {
+                executeDataQuery += ` AND M.gift = false`;
+            }
+
+            if (unsubscribed && unsubscribed.toString() === 'true') {
+                executeDataQuery += ` AND M.unsubscribed = true`;
+            } else if (unsubscribed && unsubscribed.toString() === 'false') {
+                executeDataQuery += ` AND M.unsubscribed = false`;
+            }
+
+            if (selectedRole === 'practitioner') {
+                executeDataQuery += ` AND M.user_type = 'practitioner'`;
+            }
+
+            if (sortBy && sortOrder) {
+                if (sortBy === 'last_seen' || sortBy === 'email') {
+                    executeDataQuery += ` ORDER BY U.${sortBy} ${sortOrder}`;
+                } else if (sortBy === 'first_name' || sortBy === 'last_name' || sortBy === 'username' || sortBy === 'cycle' || sortBy === 'pro_day' || sortBy === 'plan' || sortBy === 'renewalNumber' || sortBy === 'revCatTrial') {
+                    executeDataQuery += ` ORDER BY M."${sortBy}" ${sortOrder}`;
+                }
+            } else {
+                executeDataQuery += ` ORDER BY U.last_seen DESC`;
+            }
+
+            const users = await this.userModel?.sequelize?.query(executeDataQuery,
+                { type: QueryTypes.SELECT, raw: true }
+            );
+
+            console.log(users, "---users---");
+            userIds = users?.map((user: any) => user.user.id) || [];
+            console.log(userIds, "---userIds---");
+
+            let personalInfoSlug = ['personal-04-demo-edu','personal-05-demo-par-edu','personal-03-demo-ethnicity','personal-02-demo-gender','personal-06-demo-continent','personal-01-demo-age','personal-08-anthro-weight','personal-08-anthro-height','personal-11-anthro-weight-freq','personal-09-anthro-weight-high','personal-10-anthro-weight-low']
+            let personalInfoDataQuery = `Select jsonb_agg(jsonb_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id")) as "personalInfoObj"
+                FROM public.answers AS "A"
+                LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
+                WHERE "A"."user_id" IN (:userIds) AND "A"."question_slug" in (:personalInfoSlug) AND "A"."uid" = :uid
+                GROUP BY "A"."user_id"`;
+            const personalInfoData = await this.userModel?.sequelize?.query(personalInfoDataQuery,
+                { type: QueryTypes.SELECT, raw: true, replacements: { userIds: userIds, personalInfoSlug: personalInfoSlug, uid: 'cycle-0' } }
+            );
+            console.log(personalInfoData, "---personalInfoData---");
+
+
+            let onboardingSlug = ['onboarding-practitioner-use','personal-14-health-cooking','personal-15-health-meditation','onboarding-practitioner-type','onboarding-goals-why-now','onboarding-goals-why-here','personal-13-health-body','intake-08-ed-13-extra','personal-12-health-food','intake-03-anxiety-09-extra','personal-16-health-sleep-hours','intake-03-anxiety-09-extra','personal-17-health-sleep-qual']
+            let onboardingDataQuery = `Select jsonb_agg(jsonb_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id")) as "onboardingObj"
+                FROM public.answers AS "A"
+                LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
+                WHERE "A"."user_id" IN (:userIds) AND "A"."question_slug" in (:onboardingSlug) AND "A"."uid" = :uid
+                GROUP BY "A"."user_id"`;
+            const onboardingData = await this.userModel?.sequelize?.query(onboardingDataQuery,
+                { type: QueryTypes.SELECT, raw: true, replacements: { userIds: userIds, onboardingSlug: onboardingSlug, uid: 'cycle-0' } }
+            );
+            console.log(onboardingData, "---onboardingData---");
+
+
+            let executeMentalScreenerQuery = `SELECT sl.id, sl.title, sl.slug,
+                json_agg(json_build_object('survey', 
+                    json_build_object('id', s.id, 'title', s.title, 'slug', s.slug, 'survey_status', 
+                        COALESCE(ss_data.status, '[]'::json), 'survey_questions', 
+                        COALESCE(sq_data.questions, '[]'::json))) ORDER BY sls."order" ASC) as "survey_list_surveys"
+                FROM public.survey_list sl
+                LEFT JOIN public.survey_list_surveys sls ON sl.slug = sls.survey_list_slug
+                LEFT JOIN public.surveys s ON sls.survey_slug = s.slug
+                LEFT JOIN LATERAL (SELECT json_agg(json_build_object('survey_slug', ss.survey_slug, 'uid', ss.uid, 'status', ss.status)) as status
+                    FROM survey_status ss WHERE ss.survey_slug = s.slug AND ss.uid = :uid) ss_data ON true
+                LEFT JOIN LATERAL (SELECT json_agg(json_build_object('id', sq.id, 'order', sq."order",
+                            'question', json_build_object('id', q.id, 'slug', q.slug, 'content', q.content, 'category', q.category, 'field_type', q.field_type, 'data', q.data, 'answers', COALESCE(a_data.answers, '[]'::json))
+                        ) ORDER BY sq."order" ASC) as questions
+                    FROM survey_questions sq
+                    JOIN questions q ON sq.question_slug = q.slug
+                    LEFT JOIN LATERAL (SELECT json_agg(json_build_object('id', a.id, 'values', a.values, 'uid', a.uid, 'question_slug', a.question_slug, 'answer_date', a.created_at)) as answers
+                        FROM answers a WHERE a.question_slug = q.slug AND a.user_id in (:userIds) AND a.uid = :uid
+                    ) a_data ON true WHERE sq.survey_slug = s.slug
+                ) sq_data ON true WHERE sl.slug = :surveySlug GROUP BY sl.id, sl.title, sl.slug;`
+            const mentalScreener: any = await this.userModel?.sequelize?.query(
+                executeMentalScreenerQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { userIds: userIds, uid: 'cycle-0', surveySlug: 'intake-list' },
+                }
+            );
+
+            return { success: true, data: { personalInfoData, onboardingData, mentalScreener }, message: 'Admin CSV data fetched successfully' };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
 
 }

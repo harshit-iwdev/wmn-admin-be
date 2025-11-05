@@ -184,10 +184,13 @@ export class AuthService {
       }
     );
 
-    // const currentTimestamp = new Date().getTime();
-    // if (currentTimestamp - parseInt(timestamp) > 10 * 60 * 1000) { // 10 mins
-    //   throw new BadRequestException(RESPONSE_MESSAGES.LINK_EXPIRED);
-    // }
+    // disable timestamp check in dev mode
+    if (process.env.NODE_ENV === 'development') {
+      const currentTimestamp = new Date().getTime();
+      if (currentTimestamp - parseInt(timestamp) > 10 * 60 * 1000) { // 10 mins
+        throw new BadRequestException(RESPONSE_MESSAGES.LINK_EXPIRED);
+      }
+    }
 
     if (!existingUser || existingUser.length === 0) {
       throw new NotFoundException(RESPONSE_MESSAGES.USER_NOT_FOUND);

@@ -214,52 +214,52 @@ export class AuthService {
     };
   }
 
-  async forgotPassword(payload: ForgotPasswordDto) {
-    const { email } = payload;
-    const existingUser = await this.userModel.findOne({ where: { email } });
+  // async forgotPassword(payload: ForgotPasswordDto) {
+  //   const { email } = payload;
+  //   const existingUser = await this.userModel.findOne({ where: { email } });
 
-    if (!existingUser) {
-      throw new NotFoundException(RESPONSE_MESSAGES.USER_NOT_FOUND);
-    }
+  //   if (!existingUser) {
+  //     throw new NotFoundException(RESPONSE_MESSAGES.USER_NOT_FOUND);
+  //   }
 
-    if (existingUser.email_verified === false) {
-      throw new BadRequestException(RESPONSE_MESSAGES.USER_NOT_VERIFIED);
-    }
+  //   if (existingUser.email_verified === false) {
+  //     throw new BadRequestException(RESPONSE_MESSAGES.USER_NOT_VERIFIED);
+  //   }
 
-    const otp = this.commonHelperService.generateRandomNumericValue();
-    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); //10 mins validity
+  //   const otp = this.commonHelperService.generateRandomNumericValue();
+  //   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); //10 mins validity
 
-    const properties = {
-      otp,
-      fullName: `${existingUser.display_name}`,
-    };
+  //   const properties = {
+  //     otp,
+  //     fullName: `${existingUser.display_name}`,
+  //   };
 
-    const profile = {
-      email,
-      first_name: existingUser.display_name,
-      last_name: existingUser.display_name,
-    };
+  //   const profile = {
+  //     email,
+  //     first_name: existingUser.display_name,
+  //     last_name: existingUser.display_name,
+  //   };
 
-    await this.commonHelperService.sendKlaviyoEvent(
-      'reset_password',
-      properties,
-      profile,
-    );
+  //   await this.commonHelperService.sendKlaviyoEvent(
+  //     'reset_password',
+  //     properties,
+  //     profile,
+  //   );
 
-    await this.userModel.update(
-      {
-        otp_hash: otp,
-        otp_hash_expires_at: otpExpiry,
-        otp_method_last_used: 'email',
-      },
-      { where: { email } }
-    );
+  //   await this.userModel.update(
+  //     {
+  //       otp_hash: otp,
+  //       otp_hash_expires_at: otpExpiry,
+  //       otp_method_last_used: 'email',
+  //     },
+  //     { where: { email } }
+  //   );
 
-    return {
-      statusCode: HttpStatus.OK,
-      message: RESPONSE_MESSAGES.OTP_SENT,
-    };
-  }
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     message: RESPONSE_MESSAGES.OTP_SENT,
+  //   };
+  // }
 
   async verifyOtp(payload: VerifyOtpDto) {
     const { email, otp } = payload;

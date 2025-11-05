@@ -34,10 +34,10 @@ export class AuthController {
     return await this.authService.practitionerLoginVerification(payload);
   }
 
-  @Post('forgot-password')
-  async forgotPassword(@Body() payload: ForgotPasswordDto) {
-    return await this.authService.forgotPassword(payload);
-  }
+  // @Post('forgot-password')
+  // async forgotPassword(@Body() payload: ForgotPasswordDto) {
+  //   return await this.authService.forgotPassword(payload);
+  // }
 
   @Post('verify-otp')
   async verifyOtp(@Body() payload: VerifyOtpDto) {

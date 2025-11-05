@@ -17,37 +17,15 @@ export class PractitionerService {
 
     async findAllPractitionersList(pageNumber: number, pageSize: number): Promise<any> {
         try {
-            // const { searchTerm, sortBy, sortOrder, selectedRole } = filters;
 
             let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as practitionerMetadata
                 FROM auth.users as U 
-                -- JOIN public.practitioner as P on U.email = P.email
                 JOIN public.metadata as M on U.id = M.user_id
                 where U.last_seen IS NOT NULL AND M.user_type = 'practitioner'`;
 
             let executeCountQuery = `SELECT COUNT(*) as count FROM auth.users as U
-                -- JOIN public.practitioner AS P on U.email = P.email
                 JOIN public.metadata as M on U.id = M.user_id
                 WHERE U.last_seen IS NOT NULL AND M.user_type = 'practitioner'`;
-            // if (searchTerm) {
-            //     executeDataQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR P.first_name ILIKE '%${searchTerm}%' OR P.last_name ILIKE '%${searchTerm}%')`;
-            //     executeCountQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR P.first_name ILIKE '%${searchTerm}%' OR P.last_name ILIKE '%${searchTerm}%')`;
-            // }
-
-            // if (selectedRole === 'practitioner') {
-            //     executeDataQuery += ` AND M.user_type = 'practitioner'`;
-            //     executeCountQuery += ` AND M.user_type = 'practitioner'`;
-            // }
-
-            // if (sortBy && sortOrder) {
-            //     if (sortBy === 'last_seen' || sortBy === 'email') {
-            //         executeDataQuery += ` ORDER BY U.${sortBy} ${sortOrder}`;
-            //     } else if (sortBy === 'first_name' || sortBy === 'last_name' || sortBy === 'username' || sortBy === 'cycle' || sortBy === 'pro_day' || sortBy === 'plan' || sortBy === 'renewalNumber') {
-            //         executeDataQuery += ` ORDER BY M."${sortBy}" ${sortOrder}`;
-            //     }
-            // } else {
-            //     executeDataQuery += ` ORDER BY U.last_seen DESC`;
-            // }
 
             executeDataQuery += ` ORDER BY U.created_at DESC LIMIT :pageSize OFFSET :offset`;
 
@@ -90,7 +68,6 @@ export class PractitionerService {
 
             let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as practitionerMetadata
                 FROM auth.users as U 
-                -- JOIN public.practitioner as P on U.email = P.email
                 JOIN public.metadata as M on U.id = M.user_id
                 where U.last_seen IS NOT NULL AND M.user_type = 'practitioner'`;
 
@@ -204,13 +181,12 @@ export class PractitionerService {
                 if (checkUser.length > 0) {
                     console.log(`User ${email} already exists, skipping creation`);
                     continue;
+                } else {
+                    console.log(`User ${email} does not exist, creating new user`);
                 }
-
-                console.log(`User ${email} does not exist, creating new user`);
                 
                 try {
                     const newUser = await this.userService.createNewUser(element);
-                    console.log(newUser, "---newUser---");
                     if (newUser.success) {
                         console.log(`User ${email} created successfully`);
     

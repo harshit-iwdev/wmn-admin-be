@@ -28,12 +28,10 @@ export class UsersService {
                 LEFT JOIN (SELECT "follow_user_id" AS id, COUNT(*) AS follower_count
                 FROM public.user_follows GROUP BY "follow_user_id") AS followers ON followers.id = U.id
                 LEFT JOIN (SELECT "user_id" AS id, COUNT(*) AS following_count
-                FROM public.user_follows GROUP BY "user_id") AS following ON following.id = U.id
-                where U.last_seen IS NOT NULL`;
+                FROM public.user_follows GROUP BY "user_id") AS following ON following.id = U.id`;
 
             let executeCountQuery = `SELECT COUNT(*) as count FROM auth.users as U
-                JOIN public.metadata AS M on U.id = M.user_id
-                WHERE U.last_seen IS NOT NULL`;
+                JOIN public.metadata AS M on U.id = M.user_id`;
             if (searchTerm) {
                 executeDataQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
                 executeCountQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
@@ -44,9 +42,14 @@ export class UsersService {
                 executeCountQuery += ` AND M.user_type = 'practitioner'`;
             }
 
-            if (practitionerId) {
-                executeDataQuery += ` AND M.practitioner_id = :practitionerId`;
-                executeCountQuery += ` AND M.practitioner_id = :practitionerId`;
+            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+                executeDataQuery += ` JOIN public.user_follows AS UF ON U.id = UF."follow_user_id"
+                WHERE U.last_seen IS NOT NULL AND UF."user_id" = :practitionerId`;
+                executeCountQuery += ` JOIN public.user_follows AS UF ON U.id = UF."follow_user_id"
+                WHERE U.last_seen IS NOT NULL AND UF."user_id" = :practitionerId`;
+            } else {
+                executeDataQuery += ` WHERE U.last_seen IS NOT NULL`;
+                executeCountQuery += ` WHERE U.last_seen IS NOT NULL`;
             }
 
             // if (trial && trial.toString() === 'true') {
@@ -1460,11 +1463,72 @@ export class UsersService {
         }
     }
 
-    async getAnalyticsTab1Data(): Promise<any> {
+    async getPatientByPractitionerId(practitionerId: string): Promise<any> {
         try {
+            const patients: any = await this.userModel?.sequelize?.query(
+                `SELECT follow_user_id as "patientId" FROM public.user_follows WHERE user_id = :practitionerId`,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { practitionerId: practitionerId },
+                }
+            );
+
+            const patientIds = patients?.map((patient: any) => patient.patientId) || [];
+            return patientIds;
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message || error);
+        }
+    }
+
+    async getAnalyticsTab1Data(practitionerId: string): Promise<any> {
+        try {
+
+            let patientIds = [];
+            let filterOpts = {};
+            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+                patientIds = await this.getPatientByPractitionerId(practitionerId);
+            }
+
+            let totalUserCohortQuery = `SELECT COUNT(*) as "totalUserCohort" FROM auth.users as U
+                WHERE U.last_seen IS NOT NULL`;
+            let giftedUserQuery = `SELECT COUNT(DISTINCT(U.id)) as "giftedUserCount" FROM auth.users AS U
+                JOIN public.metadata as M on U.id = M.user_id
+                WHERE M."gift" = true`;
+            let dailyActiveUserQuery = `SELECT COUNT(DISTINCT(U.id)) as "dailyActiveUsers" FROM auth.users AS U
+                JOIN public.metadata as M on U.id = M.user_id
+                WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '1 day'`;
+            let weeklyActiveUserQuery = `SELECT COUNT(DISTINCT(U.id)) as "weeklyActiveUsers" FROM auth.users AS U
+                JOIN public.metadata as M on U.id = M.user_id
+                WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '7 day'`
+            let monthlyActiveUserQuery = `SELECT COUNT(DISTINCT(U.id)) as "monthlyActiveUsers" FROM auth.users AS U
+                JOIN public.metadata as M on U.id = M.user_id
+                WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '30 day'`
+            let reassessSubmittedUserCountQuery = `Select Count(Distinct(user_id)) as "reassessSubmittedUserCount" from public.survey_list_status 
+                where survey_list_slug ilike 'reassess-list' and status = 'completed'`;
+            let reassessSubmitGiftedUserCountQuery = `Select Count(Distinct("SLS".user_id)) as "reassessSubmitGiftedUserCount" from public.survey_list_status "SLS"
+                join public.metadata as M on "SLS".user_id = M.user_id
+                where "SLS".survey_list_slug ilike 'reassess-list' and "SLS".status = 'completed' and M."gift" = true`;
+
+            if (patientIds.length > 0) {
+                totalUserCohortQuery += ` AND U.id IN (:patientIds)`;
+                giftedUserQuery += ` AND U.id IN (:patientIds)`;
+                dailyActiveUserQuery += ` AND U.id IN (:patientIds)`;
+                weeklyActiveUserQuery += ` AND U.id IN (:patientIds)`;
+                monthlyActiveUserQuery += ` AND U.id IN (:patientIds)`;
+                reassessSubmittedUserCountQuery += ` AND user_id IN (:patientIds)`;
+                reassessSubmitGiftedUserCountQuery += ` AND "SLS".user_id IN (:patientIds)`;
+                filterOpts['patientIds'] = patientIds;
+            }
             const totalUserCohort: any = await this.userModel?.sequelize?.query(
-                `SELECT COUNT(*) as "totalUserCohort" FROM auth.users as U
-                WHERE U.last_seen IS NOT NULL`);
+                totalUserCohortQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { ...filterOpts },
+                }
+            );
 
             const apiKey = process.env.REV_CAT_KEY_V2 || process.env.REVENUECAT_API_KEY;
             const projectKey = process.env.REV_CAT_PROJECT_KEY;
@@ -1476,56 +1540,87 @@ export class UsersService {
                 },
             });
             const data = await response.json();
-            const subscribedUserData = data.metrics.find((metric: any) => metric.id === 'active_subscriptions');
-
+            let subscribedUserData = data.metrics.find((metric: any) => metric.id === 'active_subscriptions');
+            console.log(subscribedUserData, "subscribedUserData");
+            
+// if (subscribedUserData && practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+//     subscribedUserData = data.metrics.find((metric: any) => metric.id === 'active_subscriptions' && metric.practitioner_id === practitionerId);
+//     console.log(subscribedUserData, "subscribedUserData");
+// }
+            
             const giftedUserCount: any = await this.userModel?.sequelize?.query(
-                `SELECT COUNT(DISTINCT(U.id)) as "giftedUserCount" FROM auth.users AS U
-                JOIN public.metadata as M on U.id = M.user_id
-                WHERE M."gift" = true`);
+                giftedUserQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { ...filterOpts },
+                }
+            );
 
             const dailyActiveUserCount: any = await this.userModel?.sequelize?.query(
-                `SELECT COUNT(DISTINCT(U.id)) as "dailyActiveUsers" FROM auth.users AS U
-                JOIN public.metadata as M on U.id = M.user_id
-                WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '1 day'`);
+                dailyActiveUserQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { ...filterOpts },
+                }
+            );
 
             const weeklyActiveUserCount: any = await this.userModel?.sequelize?.query(
-                `SELECT COUNT(DISTINCT(U.id)) as "weeklyActiveUsers" FROM auth.users AS U
-                JOIN public.metadata as M on U.id = M.user_id
-                WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '7 day'`);
+                weeklyActiveUserQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { ...filterOpts },
+                }
+            );
 
             const monthlyActiveUserCount: any = await this.userModel?.sequelize?.query(
-                `SELECT COUNT(DISTINCT(U.id)) as "monthlyActiveUsers" FROM auth.users AS U
-                JOIN public.metadata as M on U.id = M.user_id
-                WHERE U.last_seen IS NOT NULL AND U.last_seen > NOW() - INTERVAL '30 day'`);
+                monthlyActiveUserQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { ...filterOpts },
+                }
+            );
 
             const reassessSubmittedUserCount: any = await this.userModel?.sequelize?.query(
-                `Select Count(Distinct(user_id)) as "reassessSubmittedUserCount" from public.survey_list_status 
-                where survey_list_slug ilike 'reassess-list' and status = 'completed'`);
+                reassessSubmittedUserCountQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { ...filterOpts },
+                }
+            );
 
             const reassessSubmitGiftedUserCount: any = await this.userModel?.sequelize?.query(
-                `Select Count(Distinct("SLS".user_id)) as "reassessSubmitGiftedUserCount" from public.survey_list_status "SLS"
-                join public.metadata as M on "SLS".user_id = M.user_id
-                where "SLS".survey_list_slug ilike 'reassess-list' and "SLS".status = 'completed' and M."gift" = true`);
+                reassessSubmitGiftedUserCountQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { ...filterOpts },
+                }
+            );
 
             return {
                 success: true, data: {
-                    totalUserCohort: totalUserCohort[0][0]?.totalUserCohort || 0,
+                    totalUserCohort: totalUserCohort[0]?.totalUserCohort || 0,
                     cohortData: {
-                        subscribedUserCount: subscribedUserData.value || 0,
-                        giftedUserCount: parseInt(giftedUserCount[0][0]?.giftedUserCount) || 0,
-                        dailyActiveUserCount: parseInt(dailyActiveUserCount[0][0]?.dailyActiveUsers) || 0,
-                        weeklyActiveUserCount: parseInt(weeklyActiveUserCount[0][0]?.weeklyActiveUsers) || 0,
-                        monthlyActiveUserCount: parseInt(monthlyActiveUserCount[0][0]?.monthlyActiveUsers) || 0,
+                        subscribedUserCount: subscribedUserData.value || 0,     // known data mismatch for practitionerId
+                        giftedUserCount: parseInt(giftedUserCount[0]?.giftedUserCount) || 0,
+                        dailyActiveUserCount: parseInt(dailyActiveUserCount[0]?.dailyActiveUsers) || 0,
+                        weeklyActiveUserCount: parseInt(weeklyActiveUserCount[0]?.weeklyActiveUsers) || 0,
+                        monthlyActiveUserCount: parseInt(monthlyActiveUserCount[0]?.monthlyActiveUsers) || 0,
                     },
                     retentionData: {
-                        dailyActiveUserCount: parseInt(dailyActiveUserCount[0][0]?.dailyActiveUsers),
-                        weeklyActiveUserCount: parseInt(weeklyActiveUserCount[0][0]?.weeklyActiveUsers),
-                        monthlyActiveUserCount: parseInt(monthlyActiveUserCount[0][0]?.monthlyActiveUsers),
+                        dailyActiveUserCount: parseInt(dailyActiveUserCount[0]?.dailyActiveUsers),
+                        weeklyActiveUserCount: parseInt(weeklyActiveUserCount[0]?.weeklyActiveUsers),
+                        monthlyActiveUserCount: parseInt(monthlyActiveUserCount[0]?.monthlyActiveUsers),
                     },
                     completionData: {
-                        total: reassessSubmittedUserCount[0][0]?.reassessSubmittedUserCount,
+                        total: reassessSubmittedUserCount[0]?.reassessSubmittedUserCount,
                         subscribed: parseInt(subscribedUserData.value),
-                        gifted: parseInt(reassessSubmitGiftedUserCount[0][0]?.reassessSubmitGiftedUserCount),
+                        gifted: parseInt(reassessSubmitGiftedUserCount[0]?.reassessSubmitGiftedUserCount),
                     }
 
                 }, message: 'Analytics cohort data fetched successfully'
@@ -1537,8 +1632,14 @@ export class UsersService {
         }
     }
 
-    async getAnalyticsTab2Data(): Promise<any> {
+    async getAnalyticsTab2Data(practitionerId: string): Promise<any> {
         try {
+
+            let patientIds = [];
+            let filterOpts = {};
+            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+                patientIds = await this.getPatientByPractitionerId(practitionerId);
+            }
 
             let executeSelfEducationInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
                     WHEN '0' THEN 'Less than High School'
@@ -1547,18 +1648,18 @@ export class UsersService {
                     WHEN '3' THEN 'College'
                     WHEN '4' THEN 'Graduate School'
                     ELSE 'Missing'
-                END AS education_level, COUNT(*) AS n,
-                ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
-                FROM public.answers AS "A"
-                WHERE "A"."question_slug" = 'personal-04-demo-edu'
-                GROUP BY education_level ORDER BY education_level`;
+                END AS education_level, COUNT(*) AS n, ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
+                FROM public.answers AS "A" WHERE "A"."question_slug" = 'personal-04-demo-edu'`;
+            if (patientIds.length > 0) {
+                executeSelfEducationInfoQuery += ` AND "A"."user_id" IN (:patientIds) GROUP BY education_level ORDER BY education_level`;
+                filterOpts['patientIds'] = patientIds;
+            } else {
+                executeSelfEducationInfoQuery += ` GROUP BY education_level ORDER BY education_level`;
+            }
 
             const selfEducationInfoList: any = await this.userModel?.sequelize?.query(
                 executeSelfEducationInfoQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                }
+                { type: QueryTypes.SELECT, raw: true, replacements: { ...filterOpts } }
             );
 
             let executeParentEducationInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
@@ -1568,18 +1669,18 @@ export class UsersService {
                     WHEN '3' THEN 'College'
                     WHEN '4' THEN 'Graduate School'
                     ELSE 'Missing'
-                END AS education_level, COUNT(*) AS n,
-                ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
-                FROM public.answers AS "A"
-                WHERE "A"."question_slug" = 'personal-05-demo-par-edu'
-                GROUP BY education_level ORDER BY education_level`;
+                END AS education_level, COUNT(*) AS n, ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
+                FROM public.answers AS "A" WHERE "A"."question_slug" = 'personal-05-demo-par-edu'`;
+            if (patientIds.length > 0) {
+                executeParentEducationInfoQuery += ` AND "A"."user_id" IN (:patientIds) GROUP BY education_level ORDER BY education_level`;
+                filterOpts['patientIds'] = patientIds;
+            } else {
+                executeParentEducationInfoQuery += ` GROUP BY education_level ORDER BY education_level`;
+            }
 
             const parentEducationInfoList: any = await this.userModel?.sequelize?.query(
                 executeParentEducationInfoQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                }
+                { type: QueryTypes.SELECT, raw: true, replacements: { ...filterOpts } }
             );
 
             let executeEthnicityInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
@@ -1589,18 +1690,18 @@ export class UsersService {
                     WHEN 'Hisp./Latinx' THEN 'Hispanic'
                     WHEN 'Black' THEN 'Black'
                     ELSE 'Missing'
-                END AS ethnicity, COUNT(*) AS n,
-                ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
-                FROM public.answers AS "A"
-                WHERE "A"."question_slug" = 'personal-03-demo-ethnicity'
-                GROUP BY ethnicity ORDER BY ethnicity`;
+                END AS ethnicity, COUNT(*) AS n, ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
+                FROM public.answers AS "A" WHERE "A"."question_slug" = 'personal-03-demo-ethnicity'`;
+            if (patientIds.length > 0) {
+                executeEthnicityInfoQuery += ` AND "A"."user_id" IN (:patientIds) GROUP BY ethnicity ORDER BY ethnicity`;
+                filterOpts['patientIds'] = patientIds;
+            } else {
+                executeEthnicityInfoQuery += ` GROUP BY ethnicity ORDER BY ethnicity`;
+            }
 
             const ethnicityInfoList: any = await this.userModel?.sequelize?.query(
                 executeEthnicityInfoQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                }
+                { type: QueryTypes.SELECT, raw: true, replacements: { ...filterOpts } }
             );
 
             let executeGenderInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
@@ -1608,18 +1709,18 @@ export class UsersService {
                     WHEN 'Woman' THEN 'Woman'
                     WHEN 'Other' THEN 'Other'
                     ELSE 'Missing'
-                END AS gender, COUNT(*) AS n,
-                ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
-                FROM public.answers AS "A"
-                WHERE "A"."question_slug" = 'personal-02-demo-gender'
-                GROUP BY gender ORDER BY gender`;
+                END AS gender, COUNT(*) AS n, ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
+                FROM public.answers AS "A" WHERE "A"."question_slug" = 'personal-02-demo-gender'`;
+            if (patientIds.length > 0) {
+                executeGenderInfoQuery += ` AND "A"."user_id" IN (:patientIds) GROUP BY gender ORDER BY gender`;
+                filterOpts['patientIds'] = patientIds;
+            } else {
+                executeGenderInfoQuery += ` GROUP BY gender ORDER BY gender`;
+            }
 
             const genderInfoList: any = await this.userModel?.sequelize?.query(
                 executeGenderInfoQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                }
+                { type: QueryTypes.SELECT, raw: true, replacements: { ...filterOpts } }
             );
 
             let executeContinentInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
@@ -1631,18 +1732,18 @@ export class UsersService {
                     WHEN '5' THEN 'Africa'
                     WHEN '6' THEN 'Antarctica'
                     ELSE 'Missing'
-                END AS continent, COUNT(*) AS n,
-                ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
-                FROM public.answers AS "A"
-                WHERE "A"."question_slug" = 'personal-06-demo-continent'
-                GROUP BY continent ORDER BY continent`;
+                END AS continent, COUNT(*) AS n, ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
+                FROM public.answers AS "A" WHERE "A"."question_slug" = 'personal-06-demo-continent'`;
+            if (patientIds.length > 0) {
+                executeContinentInfoQuery += ` AND "A"."user_id" IN (:patientIds) GROUP BY continent ORDER BY continent`;
+                filterOpts['patientIds'] = patientIds;
+            } else {
+                executeContinentInfoQuery += ` GROUP BY continent ORDER BY continent`;
+            }
 
             const continentInfoList: any = await this.userModel?.sequelize?.query(
                 executeContinentInfoQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                }
+                { type: QueryTypes.SELECT, raw: true, replacements: { ...filterOpts } }
             );
 
             let executeAgeInfoQuery = `SELECT COUNT(*) FILTER (WHERE "A"."values"::text = '""')::int AS missing_count,
@@ -1651,13 +1752,14 @@ export class UsersService {
                 ROUND(AVG(("A"."values"->>0)::numeric) FILTER (WHERE ("A"."values"->>0) ~ '^[0-9]+$'), 2) AS mean_age,
                 ROUND(STDDEV(("A"."values"->>0)::numeric) FILTER (WHERE ("A"."values"->>0) ~ '^[0-9]+$'), 2) AS sd_age
                 FROM public.answers AS "A" WHERE "A"."question_slug" = 'personal-01-demo-age'`;
+            if (patientIds.length > 0) {
+                executeAgeInfoQuery += ` AND "A"."user_id" IN (:patientIds)`;
+                filterOpts['patientIds'] = patientIds;
+            }
 
             const ageInfoList: any = await this.userModel?.sequelize?.query(
                 executeAgeInfoQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                }
+                { type: QueryTypes.SELECT, raw: true, replacements: { ...filterOpts } }
             );
 
             return {
@@ -1676,16 +1778,12 @@ export class UsersService {
         }
     }
 
-    async getAnalyticsTab3Data(): Promise<any> {
+    async getAnalyticsTab3Data(practitionerId: string): Promise<any> {
         try {
-            let executeUserMetadataQuery = `SELECT MAX(cycle) AS max_cycle FROM public.metadata`;
-            const userMetadata: any = await this.userModel?.sequelize?.query(
-                executeUserMetadataQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                }
-            );
+            let patientIds = [];
+            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+                patientIds = await this.getPatientByPractitionerId(practitionerId);
+            }
 
             let anthropometricsData: any[] = [];
             for (let i = 0; i < 5; i++) {
@@ -1712,15 +1810,20 @@ export class UsersService {
                     FROM public.answers AS "A"
                     WHERE "A"."question_slug" = :quesSlug AND "A"."uid" = :cycle`;
 
+                let weightReplaceFilterOpts = {
+                    cycle: 'cycle-' + i,
+                    quesSlug: i === 0 ? 'personal-08-anthro-weight' : 'reassess-03-personal-08-anthro-weight'
+                }
+                if (patientIds.length > 0) {
+                    executeWeightInfoQuery += ` AND "A"."user_id" IN (:patientIds)`;
+                    weightReplaceFilterOpts['patientIds'] = patientIds;
+                }
                 const weightInfoList: any = await this.userModel?.sequelize?.query(
                     executeWeightInfoQuery,
                     {
                         type: QueryTypes.SELECT,
                         raw: true,
-                        replacements: {
-                            cycle: 'cycle-' + i,
-                            quesSlug: i === 0 ? 'personal-08-anthro-weight' : 'reassess-03-personal-08-anthro-weight'
-                        }
+                        replacements: { ...weightReplaceFilterOpts }
                     }
                 );
 
@@ -1744,14 +1847,17 @@ export class UsersService {
                 
                     FROM public.answers AS "A"
                     WHERE "A"."question_slug" = 'personal-08-anthro-height' AND "A"."uid" = :cycle`;
-
+                    
+                let heightReplaceFilterOpts = {
+                    cycle: 'cycle-' + i
+                }
+                if (patientIds.length > 0) {
+                    executeHeightInfoQuery += ` AND "A"."user_id" IN (:patientIds)`;
+                    heightReplaceFilterOpts['patientIds'] = patientIds;
+                }
                 const heightInfoList: any = await this.userModel?.sequelize?.query(
                     executeHeightInfoQuery,
-                    {
-                        type: QueryTypes.SELECT,
-                        raw: true,
-                        replacements: { cycle: 'cycle-' + i }
-                    }
+                    { type: QueryTypes.SELECT, raw: true, replacements: { ...heightReplaceFilterOpts } }
                 );
 
                 let executeWeightFreqInfoQuery = `SELECT CASE trim(both '"' from "A"."values"::text)
@@ -1766,19 +1872,21 @@ export class UsersService {
                     END AS weight_freq, COUNT(*) AS n,
                     ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percent
                     FROM public.answers AS "A"
-                    WHERE "A"."question_slug" = :quesSlug AND "A"."uid" = :cycle
-                    GROUP BY weight_freq ORDER BY weight_freq`;
+                    WHERE "A"."question_slug" = :quesSlug AND "A"."uid" = :cycle`;
 
+                let weightFreqReplaceFilterOpts = {
+                    cycle: 'cycle-' + i,
+                    quesSlug: i === 0 ? 'personal-11-anthro-weight-freq' : 'reassess-03-personal-11-anthro-weight-freq'
+                }
+                if (patientIds.length > 0) {
+                    executeWeightFreqInfoQuery += ` AND "A"."user_id" IN (:patientIds) GROUP BY weight_freq ORDER BY weight_freq`;
+                    weightFreqReplaceFilterOpts['patientIds'] = patientIds;
+                } else {
+                    executeWeightFreqInfoQuery += ` GROUP BY weight_freq ORDER BY weight_freq`;
+                }
                 const weightFreqInfoList: any = await this.userModel?.sequelize?.query(
                     executeWeightFreqInfoQuery,
-                    {
-                        type: QueryTypes.SELECT,
-                        raw: true,
-                        replacements: {
-                            cycle: 'cycle-' + i,
-                            quesSlug: i === 0 ? 'personal-11-anthro-weight-freq' : 'reassess-03-personal-11-anthro-weight-freq'
-                        }
-                    }
+                    { type: QueryTypes.SELECT, raw: true, replacements: { ...weightFreqReplaceFilterOpts } }
                 );
 
                 let executeHighWeightQuery = `SELECT 
@@ -1795,12 +1903,19 @@ export class UsersService {
                     END), 2) AS sd_weight_kg
                     FROM public.answers AS "A" WHERE "A"."question_slug" = 'personal-09-anthro-weight-high' AND "A"."uid" = :cycle`;
 
+                let highWeightReplaceFilterOpts = {
+                    cycle: 'cycle-' + i
+                }
+                if (patientIds.length > 0) {
+                    executeHighWeightQuery += ` AND "A"."user_id" IN (:patientIds)`;
+                    highWeightReplaceFilterOpts['patientIds'] = patientIds;
+                }
                 const highWeightInfoList: any = await this.userModel?.sequelize?.query(
                     executeHighWeightQuery,
                     {
                         type: QueryTypes.SELECT,
                         raw: true,
-                        replacements: { cycle: 'cycle-' + i }
+                        replacements: { ...highWeightReplaceFilterOpts }
                     }
                 );
 
@@ -1818,12 +1933,19 @@ export class UsersService {
                     END), 2) AS sd_weight_kg
                     FROM public.answers AS "A" WHERE "A"."question_slug" = 'personal-10-anthro-weight-low' AND "A"."uid" = :cycle`;
 
+                let lowWeightReplaceFilterOpts = {
+                    cycle: 'cycle-' + i
+                }
+                if (patientIds.length > 0) {
+                    executeLowWeightQuery += ` AND "A"."user_id" IN (:patientIds)`;
+                    lowWeightReplaceFilterOpts['patientIds'] = patientIds;
+                }
                 const lowWeightInfoList: any = await this.userModel?.sequelize?.query(
                     executeLowWeightQuery,
                     {
                         type: QueryTypes.SELECT,
                         raw: true,
-                        replacements: { cycle: 'cycle-' + i }
+                        replacements: { ...lowWeightReplaceFilterOpts }
                     }
                 );
 
@@ -1896,8 +2018,12 @@ export class UsersService {
         }
     }
 
-    async getAnalyticsTab4Data(): Promise<any> {
+    async getAnalyticsTab4Data(practitionerId: string): Promise<any> {
         try {
+            let patientIds = [];
+            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+                patientIds = await this.getPatientByPractitionerId(practitionerId);
+            }
 
             let executeAdherenceModInfoQuery = `WITH slugs AS (
                 SELECT unnest(ARRAY['adherence-01-food-log', 'adherence-02-nightly-review', 'adherence-03-videos', 'adherence-04-assignments', 'adherence-05-gems', 'adherence-06-links', 'adherence-07-recipes', 'adherence-08-cooking', 'adherence-09-meditation', 'adherence-10-guiding-principles']) AS slug),
@@ -1910,18 +2036,23 @@ export class UsersService {
                         ELSE 'Missing'
                     END AS mod, COUNT(*) AS n FROM slugs s
                     LEFT JOIN public.answers AS "A" ON "A"."question_slug" = s.slug
+                    /**WHERE_CONDITION**/
                     GROUP BY s.slug, mod
                 ),
                 per_slug AS (SELECT question_slug, jsonb_object_agg(mod, n) AS mods
                     FROM counts GROUP BY question_slug)
                 SELECT jsonb_object_agg(question_slug, mods) AS result FROM per_slug;`;
 
+            let filterOpts = {}
+            if (patientIds.length > 0) {
+                executeAdherenceModInfoQuery = executeAdherenceModInfoQuery.replace("/**WHERE_CONDITION**/",` AND "A"."user_id" IN (:patientIds)`);
+                filterOpts['patientIds'] = patientIds;
+            } else {
+                executeAdherenceModInfoQuery = executeAdherenceModInfoQuery.replace("/**WHERE_CONDITION**/",'');
+            }
             const adherenceModInfoList: any = await this.userModel?.sequelize?.query(
                 executeAdherenceModInfoQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                }
+                { type: QueryTypes.SELECT, raw: true, replacements: { ...filterOpts } }
             );
 
             let executeAdherenceReassessInfoQuery = `WITH slugs AS (
@@ -1933,21 +2064,24 @@ export class UsersService {
                         WHEN '2' THEN 'Doing Most Times'
                         WHEN '3' THEN 'Doing Currently'
                         ELSE 'Missing'
-                    END AS mod,
-                    COUNT(*) AS n FROM slugs s
+                    END AS mod, COUNT(*) AS n FROM slugs s
                     LEFT JOIN public.answers AS "A" ON "A"."question_slug" = s.slug
+                    /**WHERE_CONDITION**/
                     GROUP BY s.slug, mod
                 ),
                 per_slug AS (SELECT question_slug, jsonb_object_agg(mod, n) AS mods
                     FROM counts GROUP BY question_slug)
                 SELECT jsonb_object_agg(question_slug, mods) AS result FROM per_slug;`;
 
+            if (patientIds.length > 0) {
+                executeAdherenceReassessInfoQuery = executeAdherenceReassessInfoQuery.replace("/**WHERE_CONDITION**/",` AND "A"."user_id" IN (:patientIds)`);
+                filterOpts['patientIds'] = patientIds;
+            } else {
+                executeAdherenceReassessInfoQuery = executeAdherenceReassessInfoQuery.replace("/**WHERE_CONDITION**/",'');
+            }
             const adherenceReassessInfoList: any = await this.userModel?.sequelize?.query(
                 executeAdherenceReassessInfoQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                }
+                { type: QueryTypes.SELECT, raw: true, replacements: { ...filterOpts } }
             );
 
             const finalResult = {
@@ -2000,8 +2134,12 @@ export class UsersService {
         });
     }
 
-    async getAnalyticsTab5Data(): Promise<any> {
+    async getAnalyticsTab5Data(practitionerId: string): Promise<any> {
         try {
+            let patientIds = [];
+            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+                patientIds = await this.getPatientByPractitionerId(practitionerId);
+            }
 
             let executeFeedbackQuery = `WITH base_questions AS (SELECT unnest(ARRAY['personal-12-health-food','personal-13-health-body','personal-14-health-cooking','personal-15-health-meditation','personal-16-health-sleep-hours','personal-17-health-sleep-qual']) AS base_slug),
                 ques AS (SELECT CASE WHEN :cycle = 'cycle-0' THEN base_slug ELSE 'reassess-03-' || base_slug END AS question_slug
@@ -2015,6 +2153,7 @@ export class UsersService {
                     ROUND(STDDEV(("A"."values"->>0)::numeric) FILTER (WHERE ("A"."values"->>0) ~ '^[0-9]+$'), 2) AS sd_overall
                 FROM ques q
                 LEFT JOIN public.answers AS "A" ON "A"."question_slug" = q.question_slug
+                /**WHERE_CONDITION**/
                 AND "A"."uid" = :cycle GROUP BY q.question_slug)
                 SELECT jsonb_object_agg(
                 question_slug,
@@ -2029,12 +2168,21 @@ export class UsersService {
 
             let feedback: any[] = [];
             for (let i = 0; i < 5; i++) {
+                let filterOpts = {
+                    cycle: 'cycle-' + i
+                }
+                if (patientIds.length > 0) {
+                    executeFeedbackQuery = executeFeedbackQuery.replace("/**WHERE_CONDITION**/",` AND "A"."user_id" IN (:patientIds)`);
+                    filterOpts['patientIds'] = patientIds;
+                } else {
+                    executeFeedbackQuery = executeFeedbackQuery.replace("/**WHERE_CONDITION**/",'');
+                }
                 let result: any = await this.userModel?.sequelize?.query(
                     executeFeedbackQuery,
                     {
                         type: QueryTypes.SELECT,
                         raw: true,
-                        replacements: { cycle: 'cycle-' + i }
+                        replacements: { ...filterOpts }
                     }
                 );
 
@@ -2052,35 +2200,12 @@ export class UsersService {
         }
     }
 
-    async getAnalyticsTab6Data(): Promise<any> {
+    async getAnalyticsTab6Data(practitionerId: string): Promise<any> {
         try {
-
-            // let executeBaselineDataQuery = `WITH ques AS (
-            //         SELECT SQ.question_slug, SQ.survey_slug FROM public.survey_questions AS SQ
-            //         JOIN public.survey_list_surveys AS SLS ON SLS.survey_slug = SQ.survey_slug
-            //         WHERE SLS.survey_list_slug = 'intake-list'
-            //     ),
-            //     stats AS (
-            //         SELECT q.survey_slug,
-            //             COUNT(*) FILTER (WHERE A.values::text = '""')::int AS missing_count,
-            //             COUNT(*) FILTER (WHERE A.values::text <> '""')::int AS total_responses,
-            //             ROUND(100.0 * COUNT(*) FILTER (WHERE A.values::text = '""') / COUNT(*), 2) AS missing_percent,
-            //             ROUND(AVG((A.values->>0)::numeric) 
-            //                 FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS mean_overall,
-            //             ROUND(STDDEV((A.values->>0)::numeric) 
-            //                 FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS sd_overall
-            //         FROM ques q
-            //         LEFT JOIN public.answers AS A ON A.question_slug = q.question_slug
-            //         WHERE A.uid = 'cycle-0' GROUP BY q.survey_slug
-            //     )
-            //     SELECT jsonb_object_agg(survey_slug, 
-            //         jsonb_build_object(
-            //             'missing_count', missing_count,
-            //             'total_responses', total_responses,
-            //             'missing_percent', missing_percent,
-            //             'mean_overall', mean_overall,
-            //             'sd_overall', sd_overall
-            //         )) AS result FROM stats;`
+            let patientIds = [];
+            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+                patientIds = await this.getPatientByPractitionerId(practitionerId);
+            }
 
             let executeBaselineDataQuery = `WITH question_stats AS (SELECT 
                         SQ.survey_slug, COUNT(*) FILTER (WHERE A.values::text = '""')::int AS missing_count,
@@ -2092,7 +2217,7 @@ export class UsersService {
                     LEFT JOIN public.answers AS A ON A.question_slug = q.slug
                     LEFT JOIN public.survey_questions AS SQ ON SQ.question_slug = q.slug
                     LEFT JOIN public.survey_list_surveys AS SLS ON SLS.survey_slug = SQ.survey_slug
-                    WHERE A.uid = 'cycle-0' AND SLS.survey_list_slug = 'intake-list'
+                    WHERE A.uid = 'cycle-0' /**WHERE_CONDITION**/ AND SLS.survey_list_slug = 'intake-list'
                     GROUP BY q.slug, SQ.survey_slug
                 ),
                 survey_aggregated AS (SELECT survey_slug, MIN(total_responses) AS total_responses, SUM(missing_count) AS missing_count,
@@ -2103,12 +2228,16 @@ export class UsersService {
                     'missing_percent', missing_percent, 'mean_overall', mean_overall,
                     'sd_overall', sd_overall)) AS result
                 FROM survey_aggregated`;
+            let filterOpts = {}
+            if (patientIds.length > 0) {
+                executeBaselineDataQuery = executeBaselineDataQuery.replace("/**WHERE_CONDITION**/",` AND A.user_id IN (:patientIds)`);
+                filterOpts['patientIds'] = patientIds;
+            } else {
+                executeBaselineDataQuery = executeBaselineDataQuery.replace("/**WHERE_CONDITION**/",'');
+            }
             const baselineData: any = await this.userModel?.sequelize?.query(
                 executeBaselineDataQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                }
+                { type: QueryTypes.SELECT, raw: true, replacements: { ...filterOpts } }
             );
 
             let reassessData: any[] = [];
@@ -2129,7 +2258,7 @@ export class UsersService {
                                 FILTER (WHERE (A.values->>0) ~ '^[0-9]+$'), 2) AS sd_overall
                         FROM ques q
                         LEFT JOIN public.answers AS A ON A.question_slug = q.question_slug
-                        WHERE A.uid = :cycle GROUP BY q.survey_slug
+                        WHERE A.uid = :cycle /**WHERE_CONDITION**/ GROUP BY q.survey_slug
                     )
                     SELECT jsonb_object_agg(survey_slug, 
                         jsonb_build_object(
@@ -2139,13 +2268,18 @@ export class UsersService {
                             'mean_overall', mean_overall,
                             'sd_overall', sd_overall
                         )) AS result FROM stats;`
+                let filterOpts = {
+                    cycle: 'cycle-' + i
+                }
+                if (patientIds.length > 0) {
+                    executeReassessDataQuery = executeReassessDataQuery.replace("/**WHERE_CONDITION**/",` AND A.user_id IN (:patientIds)`);
+                    filterOpts['patientIds'] = patientIds;
+                } else {
+                    executeReassessDataQuery = executeReassessDataQuery.replace("/**WHERE_CONDITION**/",'');
+                }
                 let result: any = await this.userModel?.sequelize?.query(
                     executeReassessDataQuery,
-                    {
-                        type: QueryTypes.SELECT,
-                        raw: true,
-                        replacements: { cycle: 'cycle-' + i }
-                    }
+                    { type: QueryTypes.SELECT, raw: true, replacements: { ...filterOpts } }
                 );
 
                 reassessData.push({

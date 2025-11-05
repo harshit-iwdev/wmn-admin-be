@@ -124,38 +124,50 @@ export class UsersController {
 
     @UseGuards(AuthGuard)
     @Get('/analytics/cohort')
-    async getAnalyticsTab1Data() {
-        return this.usersService.getAnalyticsTab1Data();
+    async getAnalyticsTab1Data(
+        @Query('practitionerId') practitionerId: string
+    ) {
+        return this.usersService.getAnalyticsTab1Data(practitionerId);
     }
 
     @UseGuards(AuthGuard)
     @Get('/analytics/demographics')
-    async getAnalyticsTab2Data() {
-        return this.usersService.getAnalyticsTab2Data();
+    async getAnalyticsTab2Data(
+        @Query('practitionerId') practitionerId: string
+    ) {
+        return this.usersService.getAnalyticsTab2Data(practitionerId);
     }
 
     @UseGuards(AuthGuard)
     @Get('/analytics/anthropometrics')
-    async getAnalyticsTab3Data() {
-        return this.usersService.getAnalyticsTab3Data();
+    async getAnalyticsTab3Data(
+        @Query('practitionerId') practitionerId: string
+    ) {
+        return this.usersService.getAnalyticsTab3Data(practitionerId);
     }
 
     // @UseGuards(AuthGuard)
     @Get('/analytics/adherence')
-    async getAnalyticsTab4Data() {
-        return this.usersService.getAnalyticsTab4Data();
+    async getAnalyticsTab4Data(
+        @Query('practitionerId') practitionerId: string
+    ) {
+        return this.usersService.getAnalyticsTab4Data(practitionerId);
     }
 
     @UseGuards(AuthGuard)
     @Get('/analytics/onboarding-reassess')
-    async getAnalyticsTab5Data() {
-        return this.usersService.getAnalyticsTab5Data();
+    async getAnalyticsTab5Data(
+        @Query('practitionerId') practitionerId: string
+    ) {
+        return this.usersService.getAnalyticsTab5Data(practitionerId);
     }
 
     @UseGuards(AuthGuard)
     @Get('/analytics/mental-health')
-    async getAnalyticsTab6Data() {
-        return this.usersService.getAnalyticsTab6Data();
+    async getAnalyticsTab6Data(
+        @Query('practitionerId') practitionerId: string
+    ) {
+        return this.usersService.getAnalyticsTab6Data(practitionerId);
     }
 
     @UseGuards(AuthGuard)

@@ -188,12 +188,13 @@ export class UsersController {
     }
 
     @UseGuards(AuthGuard)
-    @Post('/fetch-admin-csv-data/:userType')
+    @Post('/fetch-admin-csv-data')
     async fetchAdminCsvData(
-        @Param('userType') userType: string,
-        @Body() filters: FilterDto,
+        @Body() body : {
+            userIds: string[]
+        },
     ) {
-        return this.usersService.fetchAdminCsvData(userType, filters);
+        return this.usersService.fetchAdminCsvData(body.userIds);
     }
 
 }

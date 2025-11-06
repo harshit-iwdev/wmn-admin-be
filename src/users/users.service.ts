@@ -452,25 +452,25 @@ export class UsersService {
                 aiFoodLogs.forEach((log: any) => {
                     if (log.foodAiData.length > 0) {
                         log.foodAiData.forEach((item: any) => {
-                            if (item.foodGroup.toLowerCase() === 'fruit') {
+                            if (item.foodGroup && item.foodGroup.toLowerCase() === 'fruit') {
                                 aiConfirmedFoodGroups.fruit.count++;
                                 aiConfirmedFoodGroups.fruit.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.fruit.description)
-                            } else if (item.foodGroup.toLowerCase() === 'vegetable') {
+                            } else if (item.foodGroup && item.foodGroup.toLowerCase() === 'vegetable') {
                                 aiConfirmedFoodGroups.vegetable.count++;
                                 aiConfirmedFoodGroups.vegetable.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.vegetable.description)
-                            } else if (item.foodGroup.toLowerCase() === 'grain') {
+                            } else if (item.foodGroup && item.foodGroup.toLowerCase() === 'grain') {
                                 aiConfirmedFoodGroups.grain.count++;
                                 aiConfirmedFoodGroups.grain.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.grain.description)
-                            } else if (item.foodGroup.toLowerCase() === 'dairy') {
+                            } else if (item.foodGroup && item.foodGroup.toLowerCase() === 'dairy') {
                                 aiConfirmedFoodGroups.dairy.count++;
                                 aiConfirmedFoodGroups.dairy.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.dairy.description)
-                            } else if (item.foodGroup.toLowerCase() === 'protein') {
+                            } else if (item.foodGroup && item.foodGroup.toLowerCase() === 'protein') {
                                 aiConfirmedFoodGroups.protein.count++;
                                 aiConfirmedFoodGroups.protein.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.protein.description)
-                            } else if (item.foodGroup.toLowerCase() === 'bns' || item.foodGroup.toLowerCase() === 'beansNutsSeeds') {
+                            } else if (item.foodGroup && (item.foodGroup.toLowerCase() === 'bns' || item.foodGroup.toLowerCase() === 'beansNutsSeeds')) {
                                 aiConfirmedFoodGroups.beansNutsSeeds.count++;
                                 aiConfirmedFoodGroups.beansNutsSeeds.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.beansNutsSeeds.description)
-                            } else if (item.foodGroup.toLowerCase() === 'wildcard') {
+                            } else if (item.foodGroup && item.foodGroup.toLowerCase() === 'wildcard') {
                                 aiConfirmedFoodGroups.wildcard.count++;
                                 aiConfirmedFoodGroups.wildcard.description = getFlattenedDescription(item.description, aiConfirmedFoodGroups.wildcard.description)
                             }
@@ -2528,118 +2528,306 @@ export class UsersService {
     }
 
 
-    async fetchAdminCsvData(userType: string, filters: FilterDto): Promise<any> {
+    async fetchAdminCsvData(userIds: string[]): Promise<any> {
         try {
 
-            let userIds : string[] = [];
-            const { searchTerm, sortBy, sortOrder, selectedRole, gift, unsubscribed } = filters;
-
-            let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as userMetadata,
-                COALESCE(followers.follower_count, 0) AS "followerCount",
-                COALESCE(following.following_count, 0) AS "followingCount"
-                FROM auth.users as U 
-                join public.metadata as M on U.id = M.user_id
-                LEFT JOIN (SELECT "follow_user_id" AS id, COUNT(*) AS follower_count
-                FROM public.user_follows GROUP BY "follow_user_id") AS followers ON followers.id = U.id
-                LEFT JOIN (SELECT "user_id" AS id, COUNT(*) AS following_count
-                FROM public.user_follows GROUP BY "user_id") AS following ON following.id = U.id 
-                WHERE U.last_seen IS NOT NULL`;
-
-            if (searchTerm) {
-                executeDataQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
+            if (userIds && userIds.length === 0) {
+                return { success: true, data: { personalInfoData: [], onboardingData: [], mentalScreener: [] }, message: 'No users found' };
             }
 
-            if (userType === 'practitioner') {
-                executeDataQuery += ` AND M.user_type = 'practitioner'`;
-            }
+            // let userIds : string[] = [];
+            // const { searchTerm, sortBy, sortOrder, selectedRole, gift, unsubscribed } = filters;
 
-            if (gift && gift.toString() === 'true') {
-                executeDataQuery += ` AND M.gift = true`;
-            } else if (gift && gift.toString() === 'false') {
-                executeDataQuery += ` AND M.gift = false`;
-            }
+            // let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as userMetadata,
+            //     COALESCE(followers.follower_count, 0) AS "followerCount",
+            //     COALESCE(following.following_count, 0) AS "followingCount"
+            //     FROM auth.users as U 
+            //     join public.metadata as M on U.id = M.user_id
+            //     LEFT JOIN (SELECT "follow_user_id" AS id, COUNT(*) AS follower_count
+            //     FROM public.user_follows GROUP BY "follow_user_id") AS followers ON followers.id = U.id
+            //     LEFT JOIN (SELECT "user_id" AS id, COUNT(*) AS following_count
+            //     FROM public.user_follows GROUP BY "user_id") AS following ON following.id = U.id 
+            //     WHERE U.last_seen IS NOT NULL`;
 
-            if (unsubscribed && unsubscribed.toString() === 'true') {
-                executeDataQuery += ` AND M.unsubscribed = true`;
-            } else if (unsubscribed && unsubscribed.toString() === 'false') {
-                executeDataQuery += ` AND M.unsubscribed = false`;
-            }
+            // if (searchTerm) {
+            //     executeDataQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
+            // }
 
-            if (selectedRole === 'practitioner') {
-                executeDataQuery += ` AND M.user_type = 'practitioner'`;
-            }
+            // if (userType === 'practitioner') {
+            //     executeDataQuery += ` AND M.user_type = 'practitioner'`;
+            // }
 
-            if (sortBy && sortOrder) {
-                if (sortBy === 'last_seen' || sortBy === 'email') {
-                    executeDataQuery += ` ORDER BY U.${sortBy} ${sortOrder}`;
-                } else if (sortBy === 'first_name' || sortBy === 'last_name' || sortBy === 'username' || sortBy === 'cycle' || sortBy === 'pro_day' || sortBy === 'plan' || sortBy === 'renewalNumber' || sortBy === 'revCatTrial') {
-                    executeDataQuery += ` ORDER BY M."${sortBy}" ${sortOrder}`;
+            // if (gift && gift.toString() === 'true') {
+            //     executeDataQuery += ` AND M.gift = true`;
+            // } else if (gift && gift.toString() === 'false') {
+            //     executeDataQuery += ` AND M.gift = false`;
+            // }
+
+            // if (unsubscribed && unsubscribed.toString() === 'true') {
+            //     executeDataQuery += ` AND M.unsubscribed = true`;
+            // } else if (unsubscribed && unsubscribed.toString() === 'false') {
+            //     executeDataQuery += ` AND M.unsubscribed = false`;
+            // }
+
+            // if (selectedRole === 'practitioner') {
+            //     executeDataQuery += ` AND M.user_type = 'practitioner'`;
+            // }
+
+            // if (sortBy && sortOrder) {
+            //     if (sortBy === 'last_seen' || sortBy === 'email') {
+            //         executeDataQuery += ` ORDER BY U.${sortBy} ${sortOrder}`;
+            //     } else if (sortBy === 'first_name' || sortBy === 'last_name' || sortBy === 'username' || sortBy === 'cycle' || sortBy === 'pro_day' || sortBy === 'plan' || sortBy === 'renewalNumber' || sortBy === 'revCatTrial') {
+            //         executeDataQuery += ` ORDER BY M."${sortBy}" ${sortOrder}`;
+            //     }
+            // } else {
+            //     executeDataQuery += ` ORDER BY U.last_seen DESC`;
+            // }
+
+            // const users = await this.userModel?.sequelize?.query(executeDataQuery,
+            //     { type: QueryTypes.SELECT, raw: true }
+            // );
+
+            // console.log(users, "---users---");
+            // userIds = users?.map((user: any) => user.user.id) || [];
+            // console.log(userIds, "---userIds---");
+
+            let finalResponse = { 
+                personalInfoData: [] as any, 
+                onboardingData: [] as any, 
+                mentalScreener: [] as any, 
+                foodLogsData: [] as any 
+            };
+            let finalResp02 = {
+                "UserId" : "",
+                "UserType" : "",
+                "Prac_Type" : "",
+                "Prac_Use" : "",
+                "Perc_Day_Food" : "",
+                "Diets_Life" : "",
+                "Perc_Day_Body" : "",
+                "BI_Anx" : "",
+                "Comf_Cook" : "",
+                "Comf_Med" : "",
+                "Hrs_Sleep" : "",
+                "Sleep_Qual" : "",
+                "Age" : "",
+                "Gender" : "",
+                "Race_Eth" : "",
+                "Highest_Edu" : "",
+                "Parental_Edu" : "",
+                "Cont" : "", 
+                "Height" : "",
+                "Weight" : "",
+                "High_Ad_Wt" : "",
+                "Low_Ad_Wt" : "",
+                "Weigh_Often" : "",
+                "FoodLog_Count" : "",
+                "Review_Count" : "",
+                "Avg_Logs_Day" : "",
+                "Avg_Freq_F" : "",
+                "Avg_Freq_V" : "",
+                "Avg_Freq_G" : "",
+                "Avg_Freq_D" : "",
+                "Avg_Freq_P" : "",
+                "Avg_Freq_BNS" : "",
+                "ADHDA_1" : "",
+                "ADHDA_TOT" : "",
+                "ACE_TOT" : "",
+                "Ad_FoodLog" : "",
+                "Ad_NightlyRev" : "",
+                "Weight_Post1" : "",
+                "Weigh_Often_Post1" : "",
+                "Perc_Day_Food_Post1" : "",
+                "Perc_Day_Body_Post1" : "",
+                "Comf_Cook_Post1" : "",
+                "Comf_Med_Post1" : "",
+                "Hrs_Sleep_Post1" : "",
+                "Sleep_Qual_Post1" : "",
+                "ADHDA_1_Post1" : "",
+                "ADHDA_TOT_Post1" : "",
+            };
+            for (let i = 0; i < userIds.length; i++) {
+                const userId = userIds[i];
+                finalResp02.UserId = userId;
+                
+                const userData : any = await this.userModel?.sequelize?.query(`SELECT user_type from public.metadata where user_id = :userId`,
+                    { type: QueryTypes.SELECT, raw: true, replacements: { userId: userId } }
+                );
+                console.log(userData, "---userData---");
+                finalResp02.UserType = userData[0].user_type || '';
+
+                // let personalInfoSlug = ['personal-04-demo-edu','personal-05-demo-par-edu','personal-03-demo-ethnicity','personal-02-demo-gender','personal-06-demo-continent','personal-01-demo-age','personal-08-anthro-weight','personal-08-anthro-height','personal-11-anthro-weight-freq','personal-09-anthro-weight-high','personal-10-anthro-weight-low']
+                // let personalInfoDataQuery = `Select jsonb_agg(jsonb_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id")) as "personalInfoObj"
+                //     FROM public.answers AS "A"
+                //     LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
+                //     WHERE "A"."user_id" = :userId AND "A"."question_slug" in (:personalInfoSlug) AND "A"."uid" = :uid
+                //     GROUP BY "A"."user_id"`;
+                // const personalInfoData : any = await this.userModel?.sequelize?.query(personalInfoDataQuery,
+                //     { type: QueryTypes.SELECT, raw: true, replacements: { userId: userId, personalInfoSlug: personalInfoSlug, uid: 'cycle-0' } }
+                // );
+                // console.log(personalInfoData[0].personalInfoObj, "---personalInfoData---");
+                // finalResponse.personalInfoData = personalInfoData;
+
+                // const getPersonalInfoValue = (quesSlug: string, ansValue: string) => {
+                //     if (quesSlug === 'personal-08-anthro-height') { return ansValue; }
+                //     if (quesSlug === 'personal-08-anthro-weight') { return ansValue; }
+                //     if (quesSlug === 'personal-09-anthro-weight-high') { return ansValue; }
+                //     if (quesSlug === 'personal-10-anthro-weight-low') { return ansValue; }
+                //     if (quesSlug === 'personal-01-demo-age') { return ansValue; }
+                //     if (quesSlug === 'personal-02-demo-gender') { return ansValue; }
+                //     if (quesSlug === 'personal-03-demo-ethnicity') { return ansValue; }
+
+                //     let obj = personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === quesSlug);
+                //     if (obj && ansValue && obj.quesData.render && obj.quesData.render.length > 0) {
+                //         return obj.quesData.render[parseInt(ansValue)];
+                //     }
+                //     return '';
+                // }
+
+                // finalResp02.Parental_Edu = getPersonalInfoValue('personal-05-demo-par-edu', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-05-demo-par-edu')?.ansValue) || '';
+                // finalResp02.Cont = getPersonalInfoValue('personal-06-demo-continent', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-06-demo-continent')?.ansValue) || '';
+                // finalResp02.Age = getPersonalInfoValue('personal-01-demo-age', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-01-demo-age')?.ansValue) || '';
+                // finalResp02.Gender = getPersonalInfoValue('personal-02-demo-gender', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-02-demo-gender')?.ansValue) || '';
+                // finalResp02.Race_Eth = getPersonalInfoValue('personal-03-demo-ethnicity', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-03-demo-ethnicity')?.ansValue) || '';
+                // finalResp02.Highest_Edu = getPersonalInfoValue('personal-04-demo-edu', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-04-demo-edu')?.ansValue) || '';
+                // finalResp02.Height = getPersonalInfoValue('personal-08-anthro-height', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-08-anthro-height')?.ansValue) || '';
+                // finalResp02.Weight = getPersonalInfoValue('personal-08-anthro-weight', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-08-anthro-weight')?.ansValue) || '';
+                // finalResp02.High_Ad_Wt = getPersonalInfoValue('personal-09-anthro-weight-high', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-09-anthro-weight-high')?.ansValue) || '';
+                // finalResp02.Low_Ad_Wt = getPersonalInfoValue('personal-10-anthro-weight-low', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-10-anthro-weight-low')?.ansValue) || '';
+                // finalResp02.Weigh_Often = getPersonalInfoValue('personal-11-anthro-weight-freq', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-11-anthro-weight-freq')?.ansValue) || '';
+
+                // let onboardingSlug = ['onboarding-practitioner-use','personal-14-health-cooking','personal-15-health-meditation','onboarding-practitioner-type','onboarding-goals-why-now','onboarding-goals-why-here','personal-13-health-body','intake-08-ed-13-extra','personal-12-health-food','intake-03-anxiety-09-extra','personal-16-health-sleep-hours','intake-03-anxiety-09-extra','personal-17-health-sleep-qual']
+                // let onboardingDataQuery = `Select jsonb_agg(jsonb_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id")) as "onboardingObj"
+                //     FROM public.answers AS "A"
+                //     LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
+                //     WHERE "A"."user_id" = :userId AND "A"."question_slug" in (:onboardingSlug) AND "A"."uid" = :uid
+                //     GROUP BY "A"."user_id"`;
+                // const onboardingData : any = await this.userModel?.sequelize?.query(onboardingDataQuery,
+                //     { type: QueryTypes.SELECT, raw: true, replacements: { userId: userId, onboardingSlug: onboardingSlug, uid: 'cycle-0' } }
+                // );
+                // // console.log(onboardingData[0].onboardingObj, "---onboardingData---");
+                // finalResponse.onboardingData = onboardingData;
+
+                // const getOnboardingValue = (quesSlug: string, ansValue: string) => {
+                //     if (quesSlug === 'onboarding-practitioner-type' || quesSlug === 'onboarding-practitioner-use') { return ansValue; }
+                //     let obj = onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === quesSlug);
+                //     if (obj && ansValue && obj.quesData.render && obj.quesData.render.length > 0) {
+                //         return obj.quesData.render[parseInt(ansValue)];
+                //     }
+                //     return '';
+                // }
+
+                // finalResp02.Prac_Type = getOnboardingValue('onboarding-practitioner-type', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'onboarding-practitioner-type')?.ansValue) || '';
+                // finalResp02.Prac_Use = getOnboardingValue('onboarding-practitioner-use', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'onboarding-practitioner-use')?.ansValue) || '';
+                // finalResp02.Perc_Day_Food = getOnboardingValue('personal-12-health-food', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'personal-12-health-food')?.ansValue) || '';
+                // finalResp02.Diets_Life = getOnboardingValue('personal-14-health-cooking', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'personal-14-health-cooking')?.ansValue) || '';
+                // finalResp02.Perc_Day_Body = getOnboardingValue('personal-13-health-body', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'personal-13-health-body')?.ansValue) || '';
+                // finalResp02.BI_Anx = getOnboardingValue('intake-03-anxiety-09-extra', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'intake-03-anxiety-09-extra')?.ansValue) || '';
+                // finalResp02.Comf_Cook = getOnboardingValue('personal-14-health-cooking', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'personal-14-health-cooking')?.ansValue) || '';
+                // finalResp02.Comf_Med = getOnboardingValue('personal-15-health-meditation', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'personal-15-health-meditation')?.ansValue) || '';
+                // finalResp02.Hrs_Sleep = getOnboardingValue('personal-16-health-sleep-hours', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'personal-16-health-sleep-hours')?.ansValue) || '';
+                // finalResp02.Sleep_Qual = getOnboardingValue('personal-17-health-sleep-qual', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'personal-17-health-sleep-qual')?.ansValue) || '';
+
+                let commonSlug = ['personal-04-demo-edu','personal-05-demo-par-edu','personal-03-demo-ethnicity','personal-02-demo-gender','personal-06-demo-continent','personal-01-demo-age','personal-08-anthro-weight','personal-08-anthro-height','personal-11-anthro-weight-freq','personal-09-anthro-weight-high','personal-10-anthro-weight-low','onboarding-practitioner-use','personal-14-health-cooking','personal-15-health-meditation','onboarding-practitioner-type','onboarding-goals-why-now','onboarding-goals-why-here','personal-13-health-body','intake-08-ed-13-extra','personal-12-health-food','intake-03-anxiety-09-extra','personal-16-health-sleep-hours','intake-03-anxiety-09-extra','personal-17-health-sleep-qual']
+                let questionInfoDataQuery = `Select jsonb_agg(jsonb_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id")) as "questionInfoObj"
+                    FROM public.answers AS "A"
+                    LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
+                    WHERE "A"."user_id" = :userId AND "A"."question_slug" in (:commonSlug) AND "A"."uid" = :uid
+                    GROUP BY "A"."user_id"`;
+                const questionInfoData : any = await this.userModel?.sequelize?.query(questionInfoDataQuery,
+                    { type: QueryTypes.SELECT, raw: true, replacements: { userId: userId, commonSlug: commonSlug, uid: 'cycle-0' } }
+                );
+                console.log(questionInfoData[0].questionInfoObj, "---questionInfoData---");
+                // finalResponse.questionInfoData = questionInfoData;
+
+                const getQuestionInfoValue = (quesSlug: string, ansValue: string) => {
+                    if (quesSlug === 'personal-08-anthro-height') { return ansValue; }
+                    if (quesSlug === 'personal-08-anthro-weight') { return ansValue; }
+                    if (quesSlug === 'personal-09-anthro-weight-high') { return ansValue; }
+                    if (quesSlug === 'personal-10-anthro-weight-low') { return ansValue; }
+                    if (quesSlug === 'personal-01-demo-age') { return ansValue; }
+                    if (quesSlug === 'personal-02-demo-gender') { return ansValue; }
+                    if (quesSlug === 'personal-03-demo-ethnicity') { return ansValue; }
+
+                    if (quesSlug === 'onboarding-practitioner-type' || quesSlug === 'onboarding-practitioner-use') { return ansValue; }
+
+                    let obj = questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === quesSlug);
+                    if (obj && ansValue && obj.quesData.render && obj.quesData.render.length > 0) {
+                        return obj.quesData.render[parseInt(ansValue)];
+                    }
+                    return '';
                 }
-            } else {
-                executeDataQuery += ` ORDER BY U.last_seen DESC`;
+
+                finalResp02.Parental_Edu = getQuestionInfoValue('personal-05-demo-par-edu', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-05-demo-par-edu')?.ansValue) || '';
+                finalResp02.Cont = getQuestionInfoValue('personal-06-demo-continent', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-06-demo-continent')?.ansValue) || '';
+                finalResp02.Age = getQuestionInfoValue('personal-01-demo-age', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-01-demo-age')?.ansValue) || '';
+                finalResp02.Gender = getQuestionInfoValue('personal-02-demo-gender', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-02-demo-gender')?.ansValue) || '';
+                finalResp02.Race_Eth = getQuestionInfoValue('personal-03-demo-ethnicity', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-03-demo-ethnicity')?.ansValue) || '';
+                finalResp02.Highest_Edu = getQuestionInfoValue('personal-04-demo-edu', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-04-demo-edu')?.ansValue) || '';
+                finalResp02.Height = getQuestionInfoValue('personal-08-anthro-height', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-08-anthro-height')?.ansValue) || '';
+                finalResp02.Weight = getQuestionInfoValue('personal-08-anthro-weight', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-08-anthro-weight')?.ansValue) || '';
+                finalResp02.High_Ad_Wt = getQuestionInfoValue('personal-09-anthro-weight-high', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-09-anthro-weight-high')?.ansValue) || '';
+                finalResp02.Low_Ad_Wt = getQuestionInfoValue('personal-10-anthro-weight-low', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-10-anthro-weight-low')?.ansValue) || '';
+                finalResp02.Weigh_Often = getQuestionInfoValue('personal-11-anthro-weight-freq', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-11-anthro-weight-freq')?.ansValue) || '';
+
+                finalResp02.Prac_Type = getQuestionInfoValue('onboarding-practitioner-type', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'onboarding-practitioner-type')?.ansValue) || '';
+                finalResp02.Prac_Use = getQuestionInfoValue('onboarding-practitioner-use', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'onboarding-practitioner-use')?.ansValue) || '';
+                finalResp02.Perc_Day_Food = getQuestionInfoValue('personal-12-health-food', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-12-health-food')?.ansValue) || '';
+                finalResp02.Diets_Life = getQuestionInfoValue('personal-14-health-cooking', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-14-health-cooking')?.ansValue) || '';
+                finalResp02.Perc_Day_Body = getQuestionInfoValue('personal-13-health-body', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-13-health-body')?.ansValue) || '';
+                finalResp02.BI_Anx = getQuestionInfoValue('intake-03-anxiety-09-extra', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'intake-03-anxiety-09-extra')?.ansValue) || '';
+                finalResp02.Comf_Cook = getQuestionInfoValue('personal-14-health-cooking', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-14-health-cooking')?.ansValue) || '';
+                finalResp02.Comf_Med = getQuestionInfoValue('personal-15-health-meditation', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-15-health-meditation')?.ansValue) || '';
+                finalResp02.Hrs_Sleep = getQuestionInfoValue('personal-16-health-sleep-hours', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-16-health-sleep-hours')?.ansValue) || '';
+                finalResp02.Sleep_Qual = getQuestionInfoValue('personal-17-health-sleep-qual', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-17-health-sleep-qual')?.ansValue) || '';
+
+                // let executeMentalScreenerQuery = `SELECT sl.id, sl.title, sl.slug,
+                //     json_agg(json_build_object('survey', 
+                //         json_build_object('id', s.id, 'title', s.title, 'slug', s.slug, 'survey_status', 
+                //             COALESCE(ss_data.status, '[]'::json), 'survey_questions', 
+                //             COALESCE(sq_data.questions, '[]'::json))) ORDER BY sls."order" ASC) as "survey_list_surveys"
+                //     FROM public.survey_list sl
+                //     LEFT JOIN public.survey_list_surveys sls ON sl.slug = sls.survey_list_slug
+                //     LEFT JOIN public.surveys s ON sls.survey_slug = s.slug
+                //     LEFT JOIN LATERAL (SELECT json_agg(json_build_object('survey_slug', ss.survey_slug, 'uid', ss.uid, 'status', ss.status)) as status
+                //         FROM survey_status ss WHERE ss.survey_slug = s.slug AND ss.uid = :uid) ss_data ON true
+                //     LEFT JOIN LATERAL (SELECT json_agg(json_build_object('id', sq.id, 'order', sq."order",
+                //                 'question', json_build_object('id', q.id, 'slug', q.slug, 'content', q.content, 'category', q.category, 'field_type', q.field_type, 'data', q.data, 'answers', COALESCE(a_data.answers, '[]'::json))
+                //             ) ORDER BY sq."order" ASC) as questions
+                //         FROM survey_questions sq
+                //         JOIN questions q ON sq.question_slug = q.slug
+                //         LEFT JOIN LATERAL (SELECT json_agg(json_build_object('id', a.id, 'values', a.values, 'uid', a.uid, 'question_slug', a.question_slug, 'answer_date', a.created_at)) as answers
+                //             FROM answers a WHERE a.question_slug = q.slug AND a.user_id = :userId AND a.uid = :uid
+                //         ) a_data ON true WHERE sq.survey_slug = s.slug
+                //     ) sq_data ON true WHERE sl.slug = :surveySlug GROUP BY sl.id, sl.title, sl.slug;`
+                // const mentalScreener: any = await this.userModel?.sequelize?.query(
+                //     executeMentalScreenerQuery,
+                //     {
+                //         type: QueryTypes.SELECT,
+                //         raw: true,
+                //         replacements: { userId: userId, uid: 'cycle-0', surveySlug: 'intake-list' },
+                //     }
+                // );
+                // finalResponse.mentalScreener = mentalScreener;
+
+
+                let foodLogsDataResponse = await this.fetchUserFoodLogs({ id: userId, startDate: '', endDate: '' });
+                // console.log(foodLogsDataResponse, "---foodLogsDataResponse---");
+                finalResponse.foodLogsData = foodLogsDataResponse.data;
+
+                finalResp02.FoodLog_Count = foodLogsDataResponse.data.count || 0;
+                finalResp02.Review_Count = foodLogsDataResponse.data.totalReviewCount || 0;
+                finalResp02.Avg_Logs_Day = foodLogsDataResponse.data.avgFoodLogCountPerDay || 0;
+                finalResp02.Avg_Freq_F = foodLogsDataResponse.data.averageFoodLogsPerDay['Fruit (F)'] || 0;
+                finalResp02.Avg_Freq_V = foodLogsDataResponse.data.averageFoodLogsPerDay['Vegetable (V)'] || 0;
+                finalResp02.Avg_Freq_G = foodLogsDataResponse.data.averageFoodLogsPerDay['Grain (G)'] || 0;
+                finalResp02.Avg_Freq_D = foodLogsDataResponse.data.averageFoodLogsPerDay['Dairy (D)'] || 0;
+                finalResp02.Avg_Freq_P = foodLogsDataResponse.data.averageFoodLogsPerDay['Protein (P)'] || 0;
+                finalResp02.Avg_Freq_BNS = foodLogsDataResponse.data.averageFoodLogsPerDay['Beans/Nuts/Seeds (BNS)'] || 0;
+
             }
 
-            const users = await this.userModel?.sequelize?.query(executeDataQuery,
-                { type: QueryTypes.SELECT, raw: true }
-            );
-
-            console.log(users, "---users---");
-            userIds = users?.map((user: any) => user.user.id) || [];
-            console.log(userIds, "---userIds---");
-
-            let personalInfoSlug = ['personal-04-demo-edu','personal-05-demo-par-edu','personal-03-demo-ethnicity','personal-02-demo-gender','personal-06-demo-continent','personal-01-demo-age','personal-08-anthro-weight','personal-08-anthro-height','personal-11-anthro-weight-freq','personal-09-anthro-weight-high','personal-10-anthro-weight-low']
-            let personalInfoDataQuery = `Select jsonb_agg(jsonb_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id")) as "personalInfoObj"
-                FROM public.answers AS "A"
-                LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
-                WHERE "A"."user_id" IN (:userIds) AND "A"."question_slug" in (:personalInfoSlug) AND "A"."uid" = :uid
-                GROUP BY "A"."user_id"`;
-            const personalInfoData = await this.userModel?.sequelize?.query(personalInfoDataQuery,
-                { type: QueryTypes.SELECT, raw: true, replacements: { userIds: userIds, personalInfoSlug: personalInfoSlug, uid: 'cycle-0' } }
-            );
-            console.log(personalInfoData, "---personalInfoData---");
-
-
-            let onboardingSlug = ['onboarding-practitioner-use','personal-14-health-cooking','personal-15-health-meditation','onboarding-practitioner-type','onboarding-goals-why-now','onboarding-goals-why-here','personal-13-health-body','intake-08-ed-13-extra','personal-12-health-food','intake-03-anxiety-09-extra','personal-16-health-sleep-hours','intake-03-anxiety-09-extra','personal-17-health-sleep-qual']
-            let onboardingDataQuery = `Select jsonb_agg(jsonb_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id")) as "onboardingObj"
-                FROM public.answers AS "A"
-                LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
-                WHERE "A"."user_id" IN (:userIds) AND "A"."question_slug" in (:onboardingSlug) AND "A"."uid" = :uid
-                GROUP BY "A"."user_id"`;
-            const onboardingData = await this.userModel?.sequelize?.query(onboardingDataQuery,
-                { type: QueryTypes.SELECT, raw: true, replacements: { userIds: userIds, onboardingSlug: onboardingSlug, uid: 'cycle-0' } }
-            );
-            console.log(onboardingData, "---onboardingData---");
-
-
-            let executeMentalScreenerQuery = `SELECT sl.id, sl.title, sl.slug,
-                json_agg(json_build_object('survey', 
-                    json_build_object('id', s.id, 'title', s.title, 'slug', s.slug, 'survey_status', 
-                        COALESCE(ss_data.status, '[]'::json), 'survey_questions', 
-                        COALESCE(sq_data.questions, '[]'::json))) ORDER BY sls."order" ASC) as "survey_list_surveys"
-                FROM public.survey_list sl
-                LEFT JOIN public.survey_list_surveys sls ON sl.slug = sls.survey_list_slug
-                LEFT JOIN public.surveys s ON sls.survey_slug = s.slug
-                LEFT JOIN LATERAL (SELECT json_agg(json_build_object('survey_slug', ss.survey_slug, 'uid', ss.uid, 'status', ss.status)) as status
-                    FROM survey_status ss WHERE ss.survey_slug = s.slug AND ss.uid = :uid) ss_data ON true
-                LEFT JOIN LATERAL (SELECT json_agg(json_build_object('id', sq.id, 'order', sq."order",
-                            'question', json_build_object('id', q.id, 'slug', q.slug, 'content', q.content, 'category', q.category, 'field_type', q.field_type, 'data', q.data, 'answers', COALESCE(a_data.answers, '[]'::json))
-                        ) ORDER BY sq."order" ASC) as questions
-                    FROM survey_questions sq
-                    JOIN questions q ON sq.question_slug = q.slug
-                    LEFT JOIN LATERAL (SELECT json_agg(json_build_object('id', a.id, 'values', a.values, 'uid', a.uid, 'question_slug', a.question_slug, 'answer_date', a.created_at)) as answers
-                        FROM answers a WHERE a.question_slug = q.slug AND a.user_id in (:userIds) AND a.uid = :uid
-                    ) a_data ON true WHERE sq.survey_slug = s.slug
-                ) sq_data ON true WHERE sl.slug = :surveySlug GROUP BY sl.id, sl.title, sl.slug;`
-            const mentalScreener: any = await this.userModel?.sequelize?.query(
-                executeMentalScreenerQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                    replacements: { userIds: userIds, uid: 'cycle-0', surveySlug: 'intake-list' },
-                }
-            );
-
-            return { success: true, data: { personalInfoData, onboardingData, mentalScreener }, message: 'Admin CSV data fetched successfully' };
+            return { success: true, data: finalResp02, message: 'Admin CSV data fetched successfully' };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);

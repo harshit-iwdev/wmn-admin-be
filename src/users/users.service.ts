@@ -1520,23 +1520,35 @@ export class UsersService {
                 }
             );
 
-            const apiKey = process.env.REV_CAT_KEY_V2 || process.env.REVENUECAT_API_KEY;
-            const projectKey = process.env.REV_CAT_PROJECT_KEY;
-            let revCatUrl = `https://api.revenuecat.com/v2/projects/${projectKey}/metrics/overview`
-            const response = await fetch(revCatUrl, {
-                headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json',
-                },
-            });
-            const data = await response.json();
-            let subscribedUserData = data.metrics.find((metric: any) => metric.id === 'active_subscriptions');
-            console.log(subscribedUserData, "subscribedUserData");
-            
-// if (subscribedUserData && practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
-//     subscribedUserData = data.metrics.find((metric: any) => metric.id === 'active_subscriptions' && metric.practitioner_id === practitionerId);
-//     console.log(subscribedUserData, "subscribedUserData");
-// }
+            let subscribedUserCount : any = 0;
+            if (patientIds.length>0 && practitionerId.length>0 && practitionerId !== 'undefined') {
+                const subsQuery = `SELECT COUNT(DISTINCT(user_id)) as "subscribedUserCount" FROM public.metadata WHERE user_id IN (:patientIds) AND plan not in ('free')`;
+                let subscribedUserCountData : any = await this.userModel?.sequelize?.query(
+                    subsQuery,
+                    {
+                        type: QueryTypes.SELECT,
+                        raw: true,
+                        replacements: { patientIds: patientIds },
+                    }
+                );
+                console.log(subscribedUserCount, "subscribedUserCount");
+                subscribedUserCount = subscribedUserCountData[0]?.subscribedUserCount || 0;
+                console.log(subscribedUserCount, "subscribedUserCount");
+            } else {
+                const apiKey = process.env.REV_CAT_KEY_V2 || process.env.REVENUECAT_API_KEY;
+                const projectKey = process.env.REV_CAT_PROJECT_KEY;
+                let revCatUrl = `https://api.revenuecat.com/v2/projects/${projectKey}/metrics/overview`
+                const response = await fetch(revCatUrl, {
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json',
+                    },
+                });
+                const data = await response.json();
+                let subscribedUserData = data.metrics.find((metric: any) => metric.id === 'active_subscriptions');
+                console.log(subscribedUserData, "subscribedUserData");
+                subscribedUserCount = subscribedUserData.value || 0;
+            }
             
             const giftedUserCount: any = await this.userModel?.sequelize?.query(
                 giftedUserQuery,
@@ -1594,9 +1606,9 @@ export class UsersService {
 
             return {
                 success: true, data: {
-                    totalUserCohort: totalUserCohort[0]?.totalUserCohort || 0,
+                    totalUserCohort: parseInt(totalUserCohort[0]?.totalUserCohort) || 0,
                     cohortData: {
-                        subscribedUserCount: subscribedUserData.value || 0,     // known data mismatch for practitionerId
+                        subscribedUserCount: parseInt(subscribedUserCount),
                         giftedUserCount: parseInt(giftedUserCount[0]?.giftedUserCount) || 0,
                         dailyActiveUserCount: parseInt(dailyActiveUserCount[0]?.dailyActiveUsers) || 0,
                         weeklyActiveUserCount: parseInt(weeklyActiveUserCount[0]?.weeklyActiveUsers) || 0,
@@ -1608,8 +1620,8 @@ export class UsersService {
                         monthlyActiveUserCount: parseInt(monthlyActiveUserCount[0]?.monthlyActiveUsers),
                     },
                     completionData: {
-                        total: reassessSubmittedUserCount[0]?.reassessSubmittedUserCount,
-                        subscribed: parseInt(subscribedUserData.value),
+                        total: parseInt(reassessSubmittedUserCount[0]?.reassessSubmittedUserCount),
+                        subscribed: parseInt(subscribedUserCount),
                         gifted: parseInt(reassessSubmitGiftedUserCount[0]?.reassessSubmitGiftedUserCount),
                     }
 

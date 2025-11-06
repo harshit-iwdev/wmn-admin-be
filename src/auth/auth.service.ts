@@ -185,7 +185,7 @@ export class AuthService {
     );
 
     // disable timestamp check in dev mode
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === 'production') {
       const currentTimestamp = new Date().getTime();
       if (currentTimestamp - parseInt(timestamp) > 10 * 60 * 1000) { // 10 mins
         throw new BadRequestException(RESPONSE_MESSAGES.LINK_EXPIRED);

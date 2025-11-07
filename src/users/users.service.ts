@@ -2408,8 +2408,6 @@ export class UsersService {
         }
     }
 
-
-
     async importUsersFromCsv(file: Express.Multer.File, body: any): Promise<any> {
         try {
             // ✅ Step 1: Validate file
@@ -2535,285 +2533,163 @@ export class UsersService {
                 return { success: true, data: { personalInfoData: [], onboardingData: [], mentalScreener: [] }, message: 'No users found' };
             }
 
-            // let userIds : string[] = [];
-            // const { searchTerm, sortBy, sortOrder, selectedRole, gift, unsubscribed } = filters;
+            const getQuestionInfoValue = (quesSlug: string, ansValue: string, mainDataObj: any) => {
+                if (quesSlug === 'personal-08-anthro-height') { return ansValue; }
+                if (quesSlug === 'personal-08-anthro-weight') { return ansValue; }
+                if (quesSlug === 'personal-09-anthro-weight-high') { return ansValue; }
+                if (quesSlug === 'personal-10-anthro-weight-low') { return ansValue; }
+                if (quesSlug === 'personal-01-demo-age') { return ansValue; }
+                if (quesSlug === 'personal-02-demo-gender') { return ansValue; }
+                if (quesSlug === 'personal-03-demo-ethnicity') { return ansValue; }
+                if (quesSlug === 'reassess-03-personal-16-health-sleep-hours') { return ansValue }
+                if (quesSlug === 'reassess-03-personal-13-health-body') { return ansValue }
+                if (quesSlug === 'reassess-03-personal-12-health-food') { return ansValue }
+                if (quesSlug === 'reassess-03-personal-08-anthro-weight') { return ansValue }
 
-            // let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as userMetadata,
-            //     COALESCE(followers.follower_count, 0) AS "followerCount",
-            //     COALESCE(following.following_count, 0) AS "followingCount"
-            //     FROM auth.users as U 
-            //     join public.metadata as M on U.id = M.user_id
-            //     LEFT JOIN (SELECT "follow_user_id" AS id, COUNT(*) AS follower_count
-            //     FROM public.user_follows GROUP BY "follow_user_id") AS followers ON followers.id = U.id
-            //     LEFT JOIN (SELECT "user_id" AS id, COUNT(*) AS following_count
-            //     FROM public.user_follows GROUP BY "user_id") AS following ON following.id = U.id 
-            //     WHERE U.last_seen IS NOT NULL`;
+                if (quesSlug === 'onboarding-practitioner-type' || quesSlug === 'onboarding-practitioner-use') { return ansValue; }
 
-            // if (searchTerm) {
-            //     executeDataQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
-            // }
+                let obj = mainDataObj[0].questionInfoObj.find((item: any) => item.quesSlug === quesSlug);
+                if (obj && ansValue && obj.quesData.render && obj.quesData.render.length > 0) {
+                    return obj.quesData.render[parseInt(ansValue)];
+                }
+                return '';
+            }
 
-            // if (userType === 'practitioner') {
-            //     executeDataQuery += ` AND M.user_type = 'practitioner'`;
-            // }
-
-            // if (gift && gift.toString() === 'true') {
-            //     executeDataQuery += ` AND M.gift = true`;
-            // } else if (gift && gift.toString() === 'false') {
-            //     executeDataQuery += ` AND M.gift = false`;
-            // }
-
-            // if (unsubscribed && unsubscribed.toString() === 'true') {
-            //     executeDataQuery += ` AND M.unsubscribed = true`;
-            // } else if (unsubscribed && unsubscribed.toString() === 'false') {
-            //     executeDataQuery += ` AND M.unsubscribed = false`;
-            // }
-
-            // if (selectedRole === 'practitioner') {
-            //     executeDataQuery += ` AND M.user_type = 'practitioner'`;
-            // }
-
-            // if (sortBy && sortOrder) {
-            //     if (sortBy === 'last_seen' || sortBy === 'email') {
-            //         executeDataQuery += ` ORDER BY U.${sortBy} ${sortOrder}`;
-            //     } else if (sortBy === 'first_name' || sortBy === 'last_name' || sortBy === 'username' || sortBy === 'cycle' || sortBy === 'pro_day' || sortBy === 'plan' || sortBy === 'renewalNumber' || sortBy === 'revCatTrial') {
-            //         executeDataQuery += ` ORDER BY M."${sortBy}" ${sortOrder}`;
-            //     }
-            // } else {
-            //     executeDataQuery += ` ORDER BY U.last_seen DESC`;
-            // }
-
-            // const users = await this.userModel?.sequelize?.query(executeDataQuery,
-            //     { type: QueryTypes.SELECT, raw: true }
-            // );
-
-            // console.log(users, "---users---");
-            // userIds = users?.map((user: any) => user.user.id) || [];
-            // console.log(userIds, "---userIds---");
-
-            let finalResponse = { 
-                personalInfoData: [] as any, 
-                onboardingData: [] as any, 
-                mentalScreener: [] as any, 
-                foodLogsData: [] as any 
-            };
-            let finalResp02 = {
-                "UserId" : "",
-                "UserType" : "",
-                "Prac_Type" : "",
-                "Prac_Use" : "",
-                "Perc_Day_Food" : "",
-                "Diets_Life" : "",
-                "Perc_Day_Body" : "",
-                "BI_Anx" : "",
-                "Comf_Cook" : "",
-                "Comf_Med" : "",
-                "Hrs_Sleep" : "",
-                "Sleep_Qual" : "",
-                "Age" : "",
-                "Gender" : "",
-                "Race_Eth" : "",
-                "Highest_Edu" : "",
-                "Parental_Edu" : "",
-                "Cont" : "", 
-                "Height" : "",
-                "Weight" : "",
-                "High_Ad_Wt" : "",
-                "Low_Ad_Wt" : "",
-                "Weigh_Often" : "",
-                "FoodLog_Count" : "",
-                "Review_Count" : "",
-                "Avg_Logs_Day" : "",
-                "Avg_Freq_F" : "",
-                "Avg_Freq_V" : "",
-                "Avg_Freq_G" : "",
-                "Avg_Freq_D" : "",
-                "Avg_Freq_P" : "",
-                "Avg_Freq_BNS" : "",
-                "ADHDA_1" : "",
-                "ADHDA_TOT" : "",
-                "ACE_TOT" : "",
-                "Ad_FoodLog" : "",
-                "Ad_NightlyRev" : "",
-                "Weight_Post1" : "",
-                "Weigh_Often_Post1" : "",
-                "Perc_Day_Food_Post1" : "",
-                "Perc_Day_Body_Post1" : "",
-                "Comf_Cook_Post1" : "",
-                "Comf_Med_Post1" : "",
-                "Hrs_Sleep_Post1" : "",
-                "Sleep_Qual_Post1" : "",
-                "ADHDA_1_Post1" : "",
-                "ADHDA_TOT_Post1" : "",
-            };
+            let finalResponse : any[] = [];
             for (let i = 0; i < userIds.length; i++) {
+                let finalResp02 = {
+                    "UserId" : "",
+                    "UserType" : "",
+                    "Prac_Type" : "",
+                    "Prac_Use" : "",
+                    "Perc_Day_Food" : "",
+                    "Diets_Life" : "",
+                    "Perc_Day_Body" : "",
+                    "BI_Anx" : "",
+                    "Comf_Cook" : "",
+                    "Comf_Med" : "",
+                    "Hrs_Sleep" : "",
+                    "Sleep_Qual" : "",
+                    "Age" : "",
+                    "Gender" : "",
+                    "Race_Eth" : "",
+                    "Highest_Edu" : "",
+                    "Parental_Edu" : "",
+                    "Cont" : "", 
+                    "Height" : "",
+                    "Weight" : "",
+                    "High_Ad_Wt" : "",
+                    "Low_Ad_Wt" : "",
+                    "Weigh_Often" : "",
+                    "FoodLog_Count" : "",
+                    "Review_Count" : "",
+                    "Avg_Logs_Day" : "",
+                    "Avg_Freq_F" : "",
+                    "Avg_Freq_V" : "",
+                    "Avg_Freq_G" : "",
+                    "Avg_Freq_D" : "",
+                    "Avg_Freq_P" : "",
+                    "Avg_Freq_BNS" : "",
+                    "ADHDA_1" : "",
+                    "ADHDA_TOT" : "",
+                    "ACE_TOT" : "",
+                    "Ad_FoodLog" : "",
+                    "Ad_NightlyRev" : "",
+                    "Weight_Post1" : "",
+                    "Weigh_Often_Post1" : "",
+                    "Perc_Day_Food_Post1" : "",
+                    "Perc_Day_Body_Post1" : "",
+                    "Comf_Cook_Post1" : "",
+                    "Comf_Med_Post1" : "",
+                    "Hrs_Sleep_Post1" : "",
+                    "Sleep_Qual_Post1" : "",
+                    "Weight_Post2" : "",
+                    "Weigh_Often_Post2" : "",
+                    "Perc_Day_Food_Post2" : "",
+                    "Perc_Day_Body_Post2" : "",
+                    "Comf_Cook_Post2" : "",
+                    "Comf_Med_Post2" : "",
+                    "Hrs_Sleep_Post2" : "",
+                    "Sleep_Qual_Post2" : "",
+                    "ADHDA_1_Post1" : "",
+                    "ADHDA_TOT_Post1" : "",
+                };
                 const userId = userIds[i];
                 finalResp02.UserId = userId;
                 
                 const userData : any = await this.userModel?.sequelize?.query(`SELECT user_type from public.metadata where user_id = :userId`,
                     { type: QueryTypes.SELECT, raw: true, replacements: { userId: userId } }
                 );
-                console.log(userData, "---userData---");
                 finalResp02.UserType = userData[0].user_type || '';
 
-                // let personalInfoSlug = ['personal-04-demo-edu','personal-05-demo-par-edu','personal-03-demo-ethnicity','personal-02-demo-gender','personal-06-demo-continent','personal-01-demo-age','personal-08-anthro-weight','personal-08-anthro-height','personal-11-anthro-weight-freq','personal-09-anthro-weight-high','personal-10-anthro-weight-low']
-                // let personalInfoDataQuery = `Select jsonb_agg(jsonb_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id")) as "personalInfoObj"
-                //     FROM public.answers AS "A"
-                //     LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
-                //     WHERE "A"."user_id" = :userId AND "A"."question_slug" in (:personalInfoSlug) AND "A"."uid" = :uid
-                //     GROUP BY "A"."user_id"`;
-                // const personalInfoData : any = await this.userModel?.sequelize?.query(personalInfoDataQuery,
-                //     { type: QueryTypes.SELECT, raw: true, replacements: { userId: userId, personalInfoSlug: personalInfoSlug, uid: 'cycle-0' } }
-                // );
-                // console.log(personalInfoData[0].personalInfoObj, "---personalInfoData---");
-                // finalResponse.personalInfoData = personalInfoData;
-
-                // const getPersonalInfoValue = (quesSlug: string, ansValue: string) => {
-                //     if (quesSlug === 'personal-08-anthro-height') { return ansValue; }
-                //     if (quesSlug === 'personal-08-anthro-weight') { return ansValue; }
-                //     if (quesSlug === 'personal-09-anthro-weight-high') { return ansValue; }
-                //     if (quesSlug === 'personal-10-anthro-weight-low') { return ansValue; }
-                //     if (quesSlug === 'personal-01-demo-age') { return ansValue; }
-                //     if (quesSlug === 'personal-02-demo-gender') { return ansValue; }
-                //     if (quesSlug === 'personal-03-demo-ethnicity') { return ansValue; }
-
-                //     let obj = personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === quesSlug);
-                //     if (obj && ansValue && obj.quesData.render && obj.quesData.render.length > 0) {
-                //         return obj.quesData.render[parseInt(ansValue)];
-                //     }
-                //     return '';
-                // }
-
-                // finalResp02.Parental_Edu = getPersonalInfoValue('personal-05-demo-par-edu', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-05-demo-par-edu')?.ansValue) || '';
-                // finalResp02.Cont = getPersonalInfoValue('personal-06-demo-continent', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-06-demo-continent')?.ansValue) || '';
-                // finalResp02.Age = getPersonalInfoValue('personal-01-demo-age', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-01-demo-age')?.ansValue) || '';
-                // finalResp02.Gender = getPersonalInfoValue('personal-02-demo-gender', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-02-demo-gender')?.ansValue) || '';
-                // finalResp02.Race_Eth = getPersonalInfoValue('personal-03-demo-ethnicity', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-03-demo-ethnicity')?.ansValue) || '';
-                // finalResp02.Highest_Edu = getPersonalInfoValue('personal-04-demo-edu', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-04-demo-edu')?.ansValue) || '';
-                // finalResp02.Height = getPersonalInfoValue('personal-08-anthro-height', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-08-anthro-height')?.ansValue) || '';
-                // finalResp02.Weight = getPersonalInfoValue('personal-08-anthro-weight', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-08-anthro-weight')?.ansValue) || '';
-                // finalResp02.High_Ad_Wt = getPersonalInfoValue('personal-09-anthro-weight-high', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-09-anthro-weight-high')?.ansValue) || '';
-                // finalResp02.Low_Ad_Wt = getPersonalInfoValue('personal-10-anthro-weight-low', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-10-anthro-weight-low')?.ansValue) || '';
-                // finalResp02.Weigh_Often = getPersonalInfoValue('personal-11-anthro-weight-freq', personalInfoData[0].personalInfoObj.find((item: any) => item.quesSlug === 'personal-11-anthro-weight-freq')?.ansValue) || '';
-
-                // let onboardingSlug = ['onboarding-practitioner-use','personal-14-health-cooking','personal-15-health-meditation','onboarding-practitioner-type','onboarding-goals-why-now','onboarding-goals-why-here','personal-13-health-body','intake-08-ed-13-extra','personal-12-health-food','intake-03-anxiety-09-extra','personal-16-health-sleep-hours','intake-03-anxiety-09-extra','personal-17-health-sleep-qual']
-                // let onboardingDataQuery = `Select jsonb_agg(jsonb_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id")) as "onboardingObj"
-                //     FROM public.answers AS "A"
-                //     LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
-                //     WHERE "A"."user_id" = :userId AND "A"."question_slug" in (:onboardingSlug) AND "A"."uid" = :uid
-                //     GROUP BY "A"."user_id"`;
-                // const onboardingData : any = await this.userModel?.sequelize?.query(onboardingDataQuery,
-                //     { type: QueryTypes.SELECT, raw: true, replacements: { userId: userId, onboardingSlug: onboardingSlug, uid: 'cycle-0' } }
-                // );
-                // // console.log(onboardingData[0].onboardingObj, "---onboardingData---");
-                // finalResponse.onboardingData = onboardingData;
-
-                // const getOnboardingValue = (quesSlug: string, ansValue: string) => {
-                //     if (quesSlug === 'onboarding-practitioner-type' || quesSlug === 'onboarding-practitioner-use') { return ansValue; }
-                //     let obj = onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === quesSlug);
-                //     if (obj && ansValue && obj.quesData.render && obj.quesData.render.length > 0) {
-                //         return obj.quesData.render[parseInt(ansValue)];
-                //     }
-                //     return '';
-                // }
-
-                // finalResp02.Prac_Type = getOnboardingValue('onboarding-practitioner-type', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'onboarding-practitioner-type')?.ansValue) || '';
-                // finalResp02.Prac_Use = getOnboardingValue('onboarding-practitioner-use', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'onboarding-practitioner-use')?.ansValue) || '';
-                // finalResp02.Perc_Day_Food = getOnboardingValue('personal-12-health-food', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'personal-12-health-food')?.ansValue) || '';
-                // finalResp02.Diets_Life = getOnboardingValue('personal-14-health-cooking', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'personal-14-health-cooking')?.ansValue) || '';
-                // finalResp02.Perc_Day_Body = getOnboardingValue('personal-13-health-body', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'personal-13-health-body')?.ansValue) || '';
-                // finalResp02.BI_Anx = getOnboardingValue('intake-03-anxiety-09-extra', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'intake-03-anxiety-09-extra')?.ansValue) || '';
-                // finalResp02.Comf_Cook = getOnboardingValue('personal-14-health-cooking', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'personal-14-health-cooking')?.ansValue) || '';
-                // finalResp02.Comf_Med = getOnboardingValue('personal-15-health-meditation', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'personal-15-health-meditation')?.ansValue) || '';
-                // finalResp02.Hrs_Sleep = getOnboardingValue('personal-16-health-sleep-hours', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'personal-16-health-sleep-hours')?.ansValue) || '';
-                // finalResp02.Sleep_Qual = getOnboardingValue('personal-17-health-sleep-qual', onboardingData[0].onboardingObj.find((item: any) => item.quesSlug === 'personal-17-health-sleep-qual')?.ansValue) || '';
-
-                let commonSlug = ['personal-04-demo-edu','personal-05-demo-par-edu','personal-03-demo-ethnicity','personal-02-demo-gender','personal-06-demo-continent','personal-01-demo-age','personal-08-anthro-weight','personal-08-anthro-height','personal-11-anthro-weight-freq','personal-09-anthro-weight-high','personal-10-anthro-weight-low','onboarding-practitioner-use','personal-14-health-cooking','personal-15-health-meditation','onboarding-practitioner-type','onboarding-goals-why-now','onboarding-goals-why-here','personal-13-health-body','intake-08-ed-13-extra','personal-12-health-food','intake-03-anxiety-09-extra','personal-16-health-sleep-hours','intake-03-anxiety-09-extra','personal-17-health-sleep-qual']
-                let questionInfoDataQuery = `Select jsonb_agg(jsonb_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id")) as "questionInfoObj"
+                // Cycle-0 Data
+                let commonSlug = ['intake-03-anxiety-09-extra','intake-03-anxiety-09-extra','intake-08-ed-13-extra','onboarding-goals-why-here','onboarding-goals-why-now','onboarding-practitioner-type','onboarding-practitioner-use','personal-01-demo-age','personal-02-demo-gender','personal-03-demo-ethnicity','personal-04-demo-edu','personal-05-demo-par-edu','personal-06-demo-continent','personal-08-anthro-height','personal-08-anthro-weight','personal-09-anthro-weight-high','personal-10-anthro-weight-low','personal-11-anthro-weight-freq','personal-12-health-food','personal-13-health-body','personal-14-health-cooking','personal-15-health-meditation','personal-16-health-sleep-hours','personal-17-health-sleep-qual'];
+                let initialInfoDataQuery = `Select jsonb_agg(jsonb_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id")) as "questionInfoObj"
                     FROM public.answers AS "A"
                     LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
                     WHERE "A"."user_id" = :userId AND "A"."question_slug" in (:commonSlug) AND "A"."uid" = :uid
                     GROUP BY "A"."user_id"`;
-                const questionInfoData : any = await this.userModel?.sequelize?.query(questionInfoDataQuery,
+                const initialInfoData : any = await this.userModel?.sequelize?.query(initialInfoDataQuery,
                     { type: QueryTypes.SELECT, raw: true, replacements: { userId: userId, commonSlug: commonSlug, uid: 'cycle-0' } }
                 );
-                console.log(questionInfoData[0].questionInfoObj, "---questionInfoData---");
-                // finalResponse.questionInfoData = questionInfoData;
 
-                const getQuestionInfoValue = (quesSlug: string, ansValue: string) => {
-                    if (quesSlug === 'personal-08-anthro-height') { return ansValue; }
-                    if (quesSlug === 'personal-08-anthro-weight') { return ansValue; }
-                    if (quesSlug === 'personal-09-anthro-weight-high') { return ansValue; }
-                    if (quesSlug === 'personal-10-anthro-weight-low') { return ansValue; }
-                    if (quesSlug === 'personal-01-demo-age') { return ansValue; }
-                    if (quesSlug === 'personal-02-demo-gender') { return ansValue; }
-                    if (quesSlug === 'personal-03-demo-ethnicity') { return ansValue; }
+                finalResp02.Parental_Edu = getQuestionInfoValue('personal-05-demo-par-edu', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-05-demo-par-edu')?.ansValue, initialInfoData) || '';
+                finalResp02.Cont = getQuestionInfoValue('personal-06-demo-continent', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-06-demo-continent')?.ansValue, initialInfoData) || '';
+                finalResp02.Age = getQuestionInfoValue('personal-01-demo-age', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-01-demo-age')?.ansValue, initialInfoData) || '';
+                finalResp02.Gender = getQuestionInfoValue('personal-02-demo-gender', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-02-demo-gender')?.ansValue, initialInfoData) || '';
+                finalResp02.Race_Eth = getQuestionInfoValue('personal-03-demo-ethnicity', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-03-demo-ethnicity')?.ansValue, initialInfoData) || '';
+                finalResp02.Highest_Edu = getQuestionInfoValue('personal-04-demo-edu', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-04-demo-edu')?.ansValue, initialInfoData) || '';
+                finalResp02.Height = getQuestionInfoValue('personal-08-anthro-height', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-08-anthro-height')?.ansValue, initialInfoData) || '';
+                finalResp02.Weight = getQuestionInfoValue('personal-08-anthro-weight', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-08-anthro-weight')?.ansValue, initialInfoData) || '';
+                finalResp02.High_Ad_Wt = getQuestionInfoValue('personal-09-anthro-weight-high', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-09-anthro-weight-high')?.ansValue, initialInfoData) || '';
+                finalResp02.Low_Ad_Wt = getQuestionInfoValue('personal-10-anthro-weight-low', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-10-anthro-weight-low')?.ansValue, initialInfoData) || '';
+                finalResp02.Weigh_Often = getQuestionInfoValue('personal-11-anthro-weight-freq', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-11-anthro-weight-freq')?.ansValue, initialInfoData) || '';
 
-                    if (quesSlug === 'onboarding-practitioner-type' || quesSlug === 'onboarding-practitioner-use') { return ansValue; }
+                finalResp02.Prac_Type = getQuestionInfoValue('onboarding-practitioner-type', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'onboarding-practitioner-type')?.ansValue, initialInfoData) || '';
+                finalResp02.Prac_Use = getQuestionInfoValue('onboarding-practitioner-use', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'onboarding-practitioner-use')?.ansValue, initialInfoData) || '';
+                finalResp02.Perc_Day_Food = getQuestionInfoValue('personal-12-health-food', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-12-health-food')?.ansValue, initialInfoData) || '';
+                finalResp02.Diets_Life = getQuestionInfoValue('personal-14-health-cooking', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-14-health-cooking')?.ansValue, initialInfoData) || '';
+                finalResp02.Perc_Day_Body = getQuestionInfoValue('personal-13-health-body', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-13-health-body')?.ansValue, initialInfoData) || '';
+                finalResp02.BI_Anx = getQuestionInfoValue('intake-03-anxiety-09-extra', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'intake-03-anxiety-09-extra')?.ansValue, initialInfoData) || '';
+                finalResp02.Comf_Cook = getQuestionInfoValue('personal-14-health-cooking', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-14-health-cooking')?.ansValue, initialInfoData) || '';
+                finalResp02.Comf_Med = getQuestionInfoValue('personal-15-health-meditation', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-15-health-meditation')?.ansValue, initialInfoData) || '';
+                finalResp02.Hrs_Sleep = getQuestionInfoValue('personal-16-health-sleep-hours', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-16-health-sleep-hours')?.ansValue, initialInfoData) || '';
+                finalResp02.Sleep_Qual = getQuestionInfoValue('personal-17-health-sleep-qual', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-17-health-sleep-qual')?.ansValue, initialInfoData) || '';
 
-                    let obj = questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === quesSlug);
-                    if (obj && ansValue && obj.quesData.render && obj.quesData.render.length > 0) {
-                        return obj.quesData.render[parseInt(ansValue)];
+                // Cycle-1 & 2 Data
+                let commonSlugReassess = ['reassess-03-personal-08-anthro-weight','reassess-03-personal-11-anthro-weight-freq','reassess-03-personal-12-health-food','reassess-03-personal-13-health-body','reassess-03-personal-14-health-cooking','reassess-03-personal-15-health-meditation','reassess-03-personal-16-health-sleep-hours','reassess-03-personal-17-health-sleep-qual'];
+                for (let ind = 1; ind < 3; ind++) {                    
+                    let reassessInfoDataQuery = `Select jsonb_agg(jsonb_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id")) as "questionInfoObj"
+                        FROM public.answers AS "A"
+                        LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
+                        WHERE "A"."user_id" = :userId AND "A"."question_slug" in (:commonSlug) AND "A"."uid" = :uid
+                        GROUP BY "A"."user_id"`;
+                    const reassessInfoData : any = await this.userModel?.sequelize?.query(reassessInfoDataQuery,
+                        { type: QueryTypes.SELECT, raw: true, replacements: { userId: userId, commonSlug: commonSlugReassess, uid: `cycle-${ind}` } }
+                    );
+                    if (ind === 1) {
+                        finalResp02.Weight_Post1 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-08-anthro-weight', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-08-anthro-weight')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Weigh_Often_Post1 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-11-anthro-weight-freq', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-11-anthro-weight-freq')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Perc_Day_Food_Post1 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-12-health-food', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-12-health-food')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Perc_Day_Body_Post1 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-13-health-body', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-13-health-body')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Comf_Cook_Post1 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-14-health-cooking', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-14-health-cooking')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Comf_Med_Post1 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-15-health-meditation', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-15-health-meditation')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Hrs_Sleep_Post1 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-16-health-sleep-hours', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-16-health-sleep-hours')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Sleep_Qual_Post1 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-17-health-sleep-qual', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-17-health-sleep-qual')?.ansValue, reassessInfoData) : '';
                     }
-                    return '';
+                    if (ind === 2) {
+                        finalResp02.Weight_Post2 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-08-anthro-weight', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-08-anthro-weight')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Weigh_Often_Post2 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-11-anthro-weight-freq', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-11-anthro-weight-freq')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Perc_Day_Food_Post2 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-12-health-food', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-12-health-food')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Perc_Day_Body_Post2 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-13-health-body', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-13-health-body')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Comf_Cook_Post2 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-14-health-cooking', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-14-health-cooking')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Comf_Med_Post2 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-15-health-meditation', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-15-health-meditation')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Hrs_Sleep_Post2 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-16-health-sleep-hours', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-16-health-sleep-hours')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Sleep_Qual_Post2 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-17-health-sleep-qual', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-17-health-sleep-qual')?.ansValue, reassessInfoData) : '';
+                    }
                 }
 
-                finalResp02.Parental_Edu = getQuestionInfoValue('personal-05-demo-par-edu', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-05-demo-par-edu')?.ansValue) || '';
-                finalResp02.Cont = getQuestionInfoValue('personal-06-demo-continent', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-06-demo-continent')?.ansValue) || '';
-                finalResp02.Age = getQuestionInfoValue('personal-01-demo-age', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-01-demo-age')?.ansValue) || '';
-                finalResp02.Gender = getQuestionInfoValue('personal-02-demo-gender', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-02-demo-gender')?.ansValue) || '';
-                finalResp02.Race_Eth = getQuestionInfoValue('personal-03-demo-ethnicity', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-03-demo-ethnicity')?.ansValue) || '';
-                finalResp02.Highest_Edu = getQuestionInfoValue('personal-04-demo-edu', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-04-demo-edu')?.ansValue) || '';
-                finalResp02.Height = getQuestionInfoValue('personal-08-anthro-height', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-08-anthro-height')?.ansValue) || '';
-                finalResp02.Weight = getQuestionInfoValue('personal-08-anthro-weight', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-08-anthro-weight')?.ansValue) || '';
-                finalResp02.High_Ad_Wt = getQuestionInfoValue('personal-09-anthro-weight-high', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-09-anthro-weight-high')?.ansValue) || '';
-                finalResp02.Low_Ad_Wt = getQuestionInfoValue('personal-10-anthro-weight-low', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-10-anthro-weight-low')?.ansValue) || '';
-                finalResp02.Weigh_Often = getQuestionInfoValue('personal-11-anthro-weight-freq', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-11-anthro-weight-freq')?.ansValue) || '';
-
-                finalResp02.Prac_Type = getQuestionInfoValue('onboarding-practitioner-type', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'onboarding-practitioner-type')?.ansValue) || '';
-                finalResp02.Prac_Use = getQuestionInfoValue('onboarding-practitioner-use', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'onboarding-practitioner-use')?.ansValue) || '';
-                finalResp02.Perc_Day_Food = getQuestionInfoValue('personal-12-health-food', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-12-health-food')?.ansValue) || '';
-                finalResp02.Diets_Life = getQuestionInfoValue('personal-14-health-cooking', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-14-health-cooking')?.ansValue) || '';
-                finalResp02.Perc_Day_Body = getQuestionInfoValue('personal-13-health-body', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-13-health-body')?.ansValue) || '';
-                finalResp02.BI_Anx = getQuestionInfoValue('intake-03-anxiety-09-extra', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'intake-03-anxiety-09-extra')?.ansValue) || '';
-                finalResp02.Comf_Cook = getQuestionInfoValue('personal-14-health-cooking', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-14-health-cooking')?.ansValue) || '';
-                finalResp02.Comf_Med = getQuestionInfoValue('personal-15-health-meditation', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-15-health-meditation')?.ansValue) || '';
-                finalResp02.Hrs_Sleep = getQuestionInfoValue('personal-16-health-sleep-hours', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-16-health-sleep-hours')?.ansValue) || '';
-                finalResp02.Sleep_Qual = getQuestionInfoValue('personal-17-health-sleep-qual', questionInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-17-health-sleep-qual')?.ansValue) || '';
-
-                // let executeMentalScreenerQuery = `SELECT sl.id, sl.title, sl.slug,
-                //     json_agg(json_build_object('survey', 
-                //         json_build_object('id', s.id, 'title', s.title, 'slug', s.slug, 'survey_status', 
-                //             COALESCE(ss_data.status, '[]'::json), 'survey_questions', 
-                //             COALESCE(sq_data.questions, '[]'::json))) ORDER BY sls."order" ASC) as "survey_list_surveys"
-                //     FROM public.survey_list sl
-                //     LEFT JOIN public.survey_list_surveys sls ON sl.slug = sls.survey_list_slug
-                //     LEFT JOIN public.surveys s ON sls.survey_slug = s.slug
-                //     LEFT JOIN LATERAL (SELECT json_agg(json_build_object('survey_slug', ss.survey_slug, 'uid', ss.uid, 'status', ss.status)) as status
-                //         FROM survey_status ss WHERE ss.survey_slug = s.slug AND ss.uid = :uid) ss_data ON true
-                //     LEFT JOIN LATERAL (SELECT json_agg(json_build_object('id', sq.id, 'order', sq."order",
-                //                 'question', json_build_object('id', q.id, 'slug', q.slug, 'content', q.content, 'category', q.category, 'field_type', q.field_type, 'data', q.data, 'answers', COALESCE(a_data.answers, '[]'::json))
-                //             ) ORDER BY sq."order" ASC) as questions
-                //         FROM survey_questions sq
-                //         JOIN questions q ON sq.question_slug = q.slug
-                //         LEFT JOIN LATERAL (SELECT json_agg(json_build_object('id', a.id, 'values', a.values, 'uid', a.uid, 'question_slug', a.question_slug, 'answer_date', a.created_at)) as answers
-                //             FROM answers a WHERE a.question_slug = q.slug AND a.user_id = :userId AND a.uid = :uid
-                //         ) a_data ON true WHERE sq.survey_slug = s.slug
-                //     ) sq_data ON true WHERE sl.slug = :surveySlug GROUP BY sl.id, sl.title, sl.slug;`
-                // const mentalScreener: any = await this.userModel?.sequelize?.query(
-                //     executeMentalScreenerQuery,
-                //     {
-                //         type: QueryTypes.SELECT,
-                //         raw: true,
-                //         replacements: { userId: userId, uid: 'cycle-0', surveySlug: 'intake-list' },
-                //     }
-                // );
-                // finalResponse.mentalScreener = mentalScreener;
-
-
                 let foodLogsDataResponse = await this.fetchUserFoodLogs({ id: userId, startDate: '', endDate: '' });
-                // console.log(foodLogsDataResponse, "---foodLogsDataResponse---");
-                finalResponse.foodLogsData = foodLogsDataResponse.data;
 
                 finalResp02.FoodLog_Count = foodLogsDataResponse.data.count || 0;
                 finalResp02.Review_Count = foodLogsDataResponse.data.totalReviewCount || 0;
@@ -2825,9 +2701,71 @@ export class UsersService {
                 finalResp02.Avg_Freq_P = foodLogsDataResponse.data.averageFoodLogsPerDay['Protein (P)'] || 0;
                 finalResp02.Avg_Freq_BNS = foodLogsDataResponse.data.averageFoodLogsPerDay['Beans/Nuts/Seeds (BNS)'] || 0;
 
+                let mentalIntakeSlugs = ['intake-01-adhd-a-01','intake-01-adhd-a-02','intake-01-adhd-a-03','intake-01-adhd-a-04','intake-01-adhd-a-05','intake-01-adhd-a-06','intake-01-adhd-a-07','intake-01-adhd-a-08','intake-01-adhd-a-09',
+                    'intake-02-adhd-b-10','intake-02-adhd-b-11','intake-02-adhd-b-12','intake-02-adhd-b-13','intake-02-adhd-b-14','intake-02-adhd-b-15','intake-02-adhd-b-16','intake-02-adhd-b-17','intake-02-adhd-b-18',
+                    'intake-03-anxiety-00','intake-03-anxiety-01','intake-03-anxiety-02','intake-03-anxiety-03','intake-03-anxiety-04','intake-03-anxiety-05','intake-03-anxiety-06','intake-03-anxiety-07','intake-03-anxiety-08','intake-03-anxiety-09',
+                    'intake-04-depression-00','intake-04-depression-01','intake-04-depression-02','intake-04-depression-03','intake-04-depression-04','intake-04-depression-05','intake-04-depression-06','intake-04-depression-07','intake-04-depression-08','intake-04-depression-09','intake-04-depression-10-mod',
+                    'intake-05-ptsd-00','intake-05-ptsd-01','intake-05-ptsd-02','intake-05-ptsd-03','intake-05-ptsd-04','intake-05-ptsd-05','intake-05-ptsd-06','intake-05-ptsd-07','intake-05-ptsd-08','intake-05-ptsd-09','intake-05-ptsd-10','intake-05-ptsd-11','intake-05-ptsd-12','intake-05-ptsd-13','intake-05-ptsd-14','intake-05-ptsd-15','intake-05-ptsd-16','intake-05-ptsd-17','intake-05-ptsd-18','intake-05-ptsd-19',
+                    'intake-06-sud-00','intake-06-sud-01','intake-06-sud-02','intake-06-sud-03','intake-06-sud-04','intake-06-sud-05','intake-06-sud-06',
+                    'intake-07-fa-00','intake-07-fa-01','intake-07-fa-02','intake-07-fa-03','intake-07-fa-04','intake-07-fa-05','intake-07-fa-06','intake-07-fa-07','intake-07-fa-08','intake-07-fa-09','intake-07-fa-10','intake-07-fa-11','intake-07-fa-12','intake-07-fa-13',
+                    'intake-08-ed-00','intake-08-ed-01','intake-08-ed-02','intake-08-ed-03','intake-08-ed-04','intake-08-ed-05','intake-08-ed-06','intake-08-ed-07','intake-08-ed-08','intake-08-ed-09','intake-08-ed-10','intake-08-ed-10-next','intake-08-ed-11','intake-08-ed-12','intake-08-ed-13-extra',
+                    'intake-09-resilience-00','intake-09-resilience-01','intake-09-resilience-02','intake-09-resilience-03','intake-09-resilience-04','intake-09-resilience-05','intake-09-resilience-06',
+                    'intake-10-social-support-00','intake-10-social-support-01','intake-10-social-support-02','intake-10-social-support-03','intake-10-social-support-04','intake-10-social-support-05','intake-10-social-support-06','intake-10-social-support-07','intake-10-social-support-08','intake-10-social-support-09','intake-10-social-support-10','intake-10-social-support-11','intake-10-social-support-12',
+                    'intake-11-ace-00','intake-11-ace-01','intake-11-ace-02','intake-11-ace-03','intake-11-ace-04','intake-11-ace-05','intake-11-ace-06','intake-11-ace-07','intake-11-ace-08','intake-11-ace-09','intake-11-ace-10',
+                    'intake-12-ace-exp-00','intake-12-ace-exp-01','intake-12-ace-exp-02','intake-12-ace-exp-03','intake-12-ace-exp-04','intake-12-ace-exp-05','intake-12-ace-exp-06','intake-12-ace-exp-07','intake-12-ace-exp-08','intake-12-ace-exp-09','intake-12-ace-exp-10-mod'];
+                let initialMentalDataQuery = `Select jsonb_agg(jsonb_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id")) as "questionInfoObj"
+                    FROM public.answers AS "A"
+                    LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
+                    WHERE "A"."user_id" = :userId AND "A"."question_slug" in (:commonSlug) AND "A"."uid" = 'cycle-0'
+                    GROUP BY "A"."user_id"`;
+                const initialMentalInfoData : any = await this.userModel?.sequelize?.query(initialMentalDataQuery,
+                    { type: QueryTypes.SELECT, raw: true, replacements: { userId: userId, commonSlug: mentalIntakeSlugs } }
+                );
+
+                const resp01 : any = {}
+                initialMentalInfoData[0].questionInfoObj.map((dt: any) => {
+                    resp01[dt.quesSlug] = dt.quesData.render && dt.quesData.render.length > 0 ? dt.quesData.render[parseInt(dt.ansValue)] : dt.ansValue
+                })
+
+                finalResp02 = { ...finalResp02, ...resp01 };
+
+                let mentalIntakeReassessSlugs = ['reassess-01-feedback-00','reassess-01-feedback-01-app','reassess-01-feedback-02-food-log','reassess-01-feedback-03-nightly-review','reassess-01-feedback-04-intake','reassess-01-feedback-05-education','reassess-01-feedback-06-videos','reassess-01-feedback-07-assignments','reassess-01-feedback-08-gems','reassess-01-feedback-09-links','reassess-01-feedback-10-recipes','reassess-01-feedback-11-other','reassess-01-feedback-12-science','reassess-01-feedback-13-spirituality','reassess-01-feedback-14-david-wiss','reassess-01-feedback-15-other-feedback','reassess-01-feedback-16-recommendations',
+                    'reassess-02-adherence-01-food-log','reassess-02-adherence-02-food-log','reassess-02-adherence-03-videos','reassess-02-adherence-04-assignments','reassess-02-adherence-05-gems','reassess-02-adherence-06-links','reassess-02-adherence-07-recipes','reassess-02-adherence-08-cooking','reassess-02-adherence-09-meditation','reassess-02-adherence-10-guiding-principles',
+                    'reassess-03-personal-00','reassess-03-personal-08-anthro-weight','reassess-03-personal-11-anthro-weight-freq','reassess-03-personal-12-health-food','reassess-03-personal-13-health-body','reassess-03-personal-14-health-cooking','reassess-03-personal-15-health-meditation','reassess-03-personal-16-health-sleep-hours','reassess-03-personal-17-health-sleep-qual',
+                    'reassess-04-adhd-a','reassess-04-adhd-a-01','reassess-04-adhd-a-02','reassess-04-adhd-a-03','reassess-04-adhd-a-04','reassess-04-adhd-a-05','reassess-04-adhd-a-06','reassess-04-adhd-a-07','reassess-04-adhd-a-08','reassess-04-adhd-a-09',
+                    'reassess-05-adhd-b','reassess-05-adhd-b-10','reassess-05-adhd-b-11','reassess-05-adhd-b-12','reassess-05-adhd-b-13','reassess-05-adhd-b-14','reassess-05-adhd-b-15','reassess-05-adhd-b-16','reassess-05-adhd-b-17','reassess-05-adhd-b-18',
+                    'reassess-06-anxiety-00','reassess-06-anxiety-01','reassess-06-anxiety-02','reassess-06-anxiety-03','reassess-06-anxiety-04','reassess-06-anxiety-05','reassess-06-anxiety-06','reassess-06-anxiety-07','reassess-06-anxiety-08-mod','reassess-06-anxiety-09-extra',
+                    'reassess-07-depression-00','reassess-07-depression-01','reassess-07-depression-02','reassess-07-depression-03','reassess-07-depression-04','reassess-07-depression-05','reassess-07-depression-06','reassess-07-depression-07','reassess-07-depression-08','reassess-07-depression-09','reassess-07-depression-10-mod',
+                    'reassess-08-ptsd-00','reassess-08-ptsd-01','reassess-08-ptsd-02','reassess-08-ptsd-03','reassess-08-ptsd-04','reassess-08-ptsd-05','reassess-08-ptsd-06','reassess-08-ptsd-07','reassess-08-ptsd-08','reassess-08-ptsd-09','reassess-08-ptsd-10','reassess-08-ptsd-11','reassess-08-ptsd-12','reassess-08-ptsd-13','reassess-08-ptsd-14','reassess-08-ptsd-15','reassess-08-ptsd-16','reassess-08-ptsd-17','reassess-08-ptsd-18','reassess-08-ptsd-19','reassess-08-ptsd-20',
+                    'reassess-09-sud-00','reassess-09-sud-01','reassess-09-sud-02','reassess-09-sud-03','reassess-09-sud-04','reassess-09-sud-05-extra','reassess-09-sud-06',
+                    'reassess-10-food-addiction-00','reassess-10-food-addiction-01','reassess-10-food-addiction-02','reassess-10-food-addiction-03','reassess-10-food-addiction-04','reassess-10-food-addiction-05-cs','reassess-10-food-addiction-06-cs','reassess-10-food-addiction-07','reassess-10-food-addiction-08','reassess-10-food-addiction-09','reassess-10-food-addiction-10','reassess-10-food-addiction-11','reassess-10-food-addiction-12','reassess-10-food-addiction-13',
+                    'reassess-11-ed-00','reassess-11-ed-01','reassess-11-ed-02','reassess-11-ed-03','reassess-11-ed-04','reassess-11-ed-05','reassess-11-ed-06','reassess-11-ed-07','reassess-11-ed-08','reassess-11-ed-09','reassess-11-ed-10','reassess-11-ed-10-next','reassess-11-ed-11','reassess-11-ed-12','reassess-11-ed-13-extra',
+                    'reassess-12-resilience-00','reassess-12-resilience-01','reassess-12-resilience-02','reassess-12-resilience-03','reassess-12-resilience-04','reassess-12-resilience-05','reassess-12-resilience-06',
+                    'reassess-13-social-support-00','reassess-13-social-support-01','reassess-13-social-support-02','reassess-13-social-support-03','reassess-13-social-support-04','reassess-13-social-support-05','reassess-13-social-support-06','reassess-13-social-support-07','reassess-13-social-support-08','reassess-13-social-support-09','reassess-13-social-support-10','reassess-13-social-support-11','reassess-13-social-support-12'];
+                
+                let reassessMentalDataQuery = `Select jsonb_agg(jsonb_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id")) as "questionInfoObj"
+                    FROM public.answers AS "A"
+                    LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
+                    WHERE "A"."user_id" = :userId AND "A"."question_slug" in (:commonSlug) AND "A"."uid" = :uid
+                    GROUP BY "A"."user_id"`;
+                    for (let i = 1; i < 3; i++) {
+                        const reassessMentalInfoData : any = await this.userModel?.sequelize?.query(reassessMentalDataQuery,
+                            { type: QueryTypes.SELECT, raw: true, replacements: { userId: userId, uid: 'cycle-'+i, commonSlug: mentalIntakeReassessSlugs } }
+                        );
+                        const resp02 : any = {};
+                        if (reassessMentalInfoData.length > 0) {
+                            reassessMentalInfoData[0].questionInfoObj.map((dt: any) => {
+                                resp02[dt.quesSlug+'-cycle-'+i] = dt.quesData.render && dt.quesData.render.length > 0 ? dt.quesData.render[parseInt(dt.ansValue)] : dt.ansValue
+                            })
+                        }
+
+                        finalResp02 = { ...finalResp02, ...resp02 };
+                }
+
+                finalResponse.push(finalResp02);
             }
 
-            return { success: true, data: finalResp02, message: 'Admin CSV data fetched successfully' };
+            return { success: true, data: finalResponse, message: 'Admin CSV data fetched successfully' };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);

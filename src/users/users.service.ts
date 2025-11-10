@@ -2295,31 +2295,31 @@ export class UsersService {
                 patientIds = await this.getPatientByPractitionerId(practitionerId);
             }
 
-            let executeDistinctUserQuery = `SELECT user_id FROM public.answers WHERE uid = 'cycle-0' AND values <> '""'
-                    AND question_slug IN ('intake-01-adhd-a-01', 'intake-01-adhd-a-02', 'intake-01-adhd-a-03', 'intake-01-adhd-a-04', 'intake-01-adhd-a-05', 'intake-01-adhd-a-06', 'intake-01-adhd-a-07', 'intake-01-adhd-a-08', 'intake-01-adhd-a-09',
-                    'intake-02-adhd-b-10', 'intake-02-adhd-b-11', 'intake-02-adhd-b-12', 'intake-02-adhd-b-13', 'intake-02-adhd-b-14', 'intake-02-adhd-b-15', 'intake-02-adhd-b-16', 'intake-02-adhd-b-17', 'intake-02-adhd-b-18',
-                    'intake-03-anxiety-00', 'intake-03-anxiety-01', 'intake-03-anxiety-02', 'intake-03-anxiety-03', 'intake-03-anxiety-04', 'intake-03-anxiety-05', 'intake-03-anxiety-06', 'intake-03-anxiety-07', 'intake-03-anxiety-08', 'intake-03-anxiety-09',
-                    'intake-04-depression-00', 'intake-04-depression-01', 'intake-04-depression-02', 'intake-04-depression-03', 'intake-04-depression-04', 'intake-04-depression-05', 'intake-04-depression-06', 'intake-04-depression-07', 'intake-04-depression-08', 'intake-04-depression-09', 'intake-04-depression-10-mod',
-                    'intake-05-ptsd-00', 'intake-05-ptsd-01', 'intake-05-ptsd-02', 'intake-05-ptsd-03', 'intake-05-ptsd-04', 'intake-05-ptsd-05', 'intake-05-ptsd-06', 'intake-05-ptsd-07', 'intake-05-ptsd-08', 'intake-05-ptsd-09', 'intake-05-ptsd-10', 'intake-05-ptsd-11', 'intake-05-ptsd-12', 'intake-05-ptsd-13', 'intake-05-ptsd-14', 'intake-05-ptsd-15', 'intake-05-ptsd-16', 'intake-05-ptsd-17', 'intake-05-ptsd-18', 'intake-05-ptsd-19',
-                    'intake-06-sud-00', 'intake-06-sud-01', 'intake-06-sud-02', 'intake-06-sud-03', 'intake-06-sud-04', 'intake-06-sud-05', 'intake-06-sud-06',
-                    'intake-07-fa-00', 'intake-07-fa-01', 'intake-07-fa-02', 'intake-07-fa-03', 'intake-07-fa-04', 'intake-07-fa-05', 'intake-07-fa-06', 'intake-07-fa-07', 'intake-07-fa-08', 'intake-07-fa-09', 'intake-07-fa-10', 'intake-07-fa-11', 'intake-07-fa-12', 'intake-07-fa-13',
-                    'intake-08-ed-00', 'intake-08-ed-01', 'intake-08-ed-02', 'intake-08-ed-03', 'intake-08-ed-04', 'intake-08-ed-05', 'intake-08-ed-06', 'intake-08-ed-07', 'intake-08-ed-08', 'intake-08-ed-09', 'intake-08-ed-10', 'intake-08-ed-10-next', 'intake-08-ed-11', 'intake-08-ed-12', 'intake-08-ed-13-extra',
-                    'intake-09-resilience-00', 'intake-09-resilience-01', 'intake-09-resilience-02', 'intake-09-resilience-03', 'intake-09-resilience-04', 'intake-09-resilience-05', 'intake-09-resilience-06',
-                    'intake-10-social-support-00', 'intake-10-social-support-01', 'intake-10-social-support-02', 'intake-10-social-support-03', 'intake-10-social-support-04', 'intake-10-social-support-05', 'intake-10-social-support-06', 'intake-10-social-support-07', 'intake-10-social-support-08', 'intake-10-social-support-09', 'intake-10-social-support-10', 'intake-10-social-support-11', 'intake-10-social-support-12',
-                    'intake-11-ace-00', 'intake-11-ace-01', 'intake-11-ace-02', 'intake-11-ace-03', 'intake-11-ace-04', 'intake-11-ace-05', 'intake-11-ace-06', 'intake-11-ace-07', 'intake-11-ace-08', 'intake-11-ace-09', 'intake-11-ace-10',
-                    'intake-12-ace-exp-00', 'intake-12-ace-exp-01', 'intake-12-ace-exp-02', 'intake-12-ace-exp-03', 'intake-12-ace-exp-04', 'intake-12-ace-exp-05', 'intake-12-ace-exp-06', 'intake-12-ace-exp-07', 'intake-12-ace-exp-08', 'intake-12-ace-exp-09', 'intake-12-ace-exp-10-mod')`
-            if (patientIds.length > 0) {
-                executeDistinctUserQuery += ` AND user_id IN (:patientIds) GROUP BY user_id HAVING COUNT(DISTINCT question_slug) = 6;`;
-            } else {
-                executeDistinctUserQuery += ` GROUP BY user_id HAVING COUNT(DISTINCT question_slug) = 6;`;
-            }
+            // let executeDistinctUserQuery = `SELECT user_id FROM public.answers WHERE uid = 'cycle-0' AND values <> '""'
+            //         AND question_slug IN ('intake-01-adhd-a-01', 'intake-01-adhd-a-02', 'intake-01-adhd-a-03', 'intake-01-adhd-a-04', 'intake-01-adhd-a-05', 'intake-01-adhd-a-06', 'intake-01-adhd-a-07', 'intake-01-adhd-a-08', 'intake-01-adhd-a-09',
+            //         'intake-02-adhd-b-10', 'intake-02-adhd-b-11', 'intake-02-adhd-b-12', 'intake-02-adhd-b-13', 'intake-02-adhd-b-14', 'intake-02-adhd-b-15', 'intake-02-adhd-b-16', 'intake-02-adhd-b-17', 'intake-02-adhd-b-18',
+            //         'intake-03-anxiety-00', 'intake-03-anxiety-01', 'intake-03-anxiety-02', 'intake-03-anxiety-03', 'intake-03-anxiety-04', 'intake-03-anxiety-05', 'intake-03-anxiety-06', 'intake-03-anxiety-07', 'intake-03-anxiety-08', 'intake-03-anxiety-09',
+            //         'intake-04-depression-00', 'intake-04-depression-01', 'intake-04-depression-02', 'intake-04-depression-03', 'intake-04-depression-04', 'intake-04-depression-05', 'intake-04-depression-06', 'intake-04-depression-07', 'intake-04-depression-08', 'intake-04-depression-09', 'intake-04-depression-10-mod',
+            //         'intake-05-ptsd-00', 'intake-05-ptsd-01', 'intake-05-ptsd-02', 'intake-05-ptsd-03', 'intake-05-ptsd-04', 'intake-05-ptsd-05', 'intake-05-ptsd-06', 'intake-05-ptsd-07', 'intake-05-ptsd-08', 'intake-05-ptsd-09', 'intake-05-ptsd-10', 'intake-05-ptsd-11', 'intake-05-ptsd-12', 'intake-05-ptsd-13', 'intake-05-ptsd-14', 'intake-05-ptsd-15', 'intake-05-ptsd-16', 'intake-05-ptsd-17', 'intake-05-ptsd-18', 'intake-05-ptsd-19',
+            //         'intake-06-sud-00', 'intake-06-sud-01', 'intake-06-sud-02', 'intake-06-sud-03', 'intake-06-sud-04', 'intake-06-sud-05', 'intake-06-sud-06',
+            //         'intake-07-fa-00', 'intake-07-fa-01', 'intake-07-fa-02', 'intake-07-fa-03', 'intake-07-fa-04', 'intake-07-fa-05', 'intake-07-fa-06', 'intake-07-fa-07', 'intake-07-fa-08', 'intake-07-fa-09', 'intake-07-fa-10', 'intake-07-fa-11', 'intake-07-fa-12', 'intake-07-fa-13',
+            //         'intake-08-ed-00', 'intake-08-ed-01', 'intake-08-ed-02', 'intake-08-ed-03', 'intake-08-ed-04', 'intake-08-ed-05', 'intake-08-ed-06', 'intake-08-ed-07', 'intake-08-ed-08', 'intake-08-ed-09', 'intake-08-ed-10', 'intake-08-ed-10-next', 'intake-08-ed-11', 'intake-08-ed-12', 'intake-08-ed-13-extra',
+            //         'intake-09-resilience-00', 'intake-09-resilience-01', 'intake-09-resilience-02', 'intake-09-resilience-03', 'intake-09-resilience-04', 'intake-09-resilience-05', 'intake-09-resilience-06',
+            //         'intake-10-social-support-00', 'intake-10-social-support-01', 'intake-10-social-support-02', 'intake-10-social-support-03', 'intake-10-social-support-04', 'intake-10-social-support-05', 'intake-10-social-support-06', 'intake-10-social-support-07', 'intake-10-social-support-08', 'intake-10-social-support-09', 'intake-10-social-support-10', 'intake-10-social-support-11', 'intake-10-social-support-12',
+            //         'intake-11-ace-00', 'intake-11-ace-01', 'intake-11-ace-02', 'intake-11-ace-03', 'intake-11-ace-04', 'intake-11-ace-05', 'intake-11-ace-06', 'intake-11-ace-07', 'intake-11-ace-08', 'intake-11-ace-09', 'intake-11-ace-10',
+            //         'intake-12-ace-exp-00', 'intake-12-ace-exp-01', 'intake-12-ace-exp-02', 'intake-12-ace-exp-03', 'intake-12-ace-exp-04', 'intake-12-ace-exp-05', 'intake-12-ace-exp-06', 'intake-12-ace-exp-07', 'intake-12-ace-exp-08', 'intake-12-ace-exp-09', 'intake-12-ace-exp-10-mod')`
+            // if (patientIds.length > 0) {
+            //     executeDistinctUserQuery += ` AND user_id IN (:patientIds) GROUP BY user_id HAVING COUNT(DISTINCT question_slug) = 6;`;
+            // } else {
+            //     executeDistinctUserQuery += ` GROUP BY user_id HAVING COUNT(DISTINCT question_slug) = 6;`;
+            // }
 
-            let userResult: any = await this.userModel?.sequelize?.query(
-                executeDistinctUserQuery,
-                { type: QueryTypes.SELECT, raw: true, replacements: { patientIds: patientIds } }
-            );
-            let userIds = userResult.map((dt: any) => dt.user_id)
-            patientIds = Array.from(new Set(userIds));
+            // let userResult: any = await this.userModel?.sequelize?.query(
+            //     executeDistinctUserQuery,
+            //     { type: QueryTypes.SELECT, raw: true, replacements: { patientIds: patientIds } }
+            // );
+            // let userIds = userResult.map((dt: any) => dt.user_id)
+            // patientIds = Array.from(new Set(userIds));
 
             let executeBaselineDataQuery = `WITH question_stats AS (SELECT 
                         SQ.survey_slug, COUNT(*) FILTER (WHERE A.values::text = '""')::int AS missing_count,

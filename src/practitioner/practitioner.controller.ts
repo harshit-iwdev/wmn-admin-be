@@ -13,9 +13,9 @@ export class PractitionerController {
     async fetchAllPractitionersList(
         @Param('pageNumber') pageNumber: number,
         @Param('pageSize') pageSize: number,
-        // @Body() filters: FilterDto
+        @Body() filters: FilterDto
     ): Promise<IResponse> {
-        return await this.practitionerService.findAllPractitionersList(pageNumber, pageSize);
+        return await this.practitionerService.findAllPractitionersList(pageNumber, pageSize, filters);
     }
 
     @UseGuards(AuthGuard)

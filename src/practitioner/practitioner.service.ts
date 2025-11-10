@@ -15,52 +15,173 @@ export class PractitionerService {
         private readonly userService: UsersService,
     ) { }
 
-    async findAllPractitionersList(pageNumber: number, pageSize: number): Promise<any> {
+    async findAllPractitionersList(pageNumber: number, pageSize: number, filters: FilterDto): Promise<any> {
         try {
+            const { searchTerm, sortBy, sortOrder, gift } = filters;
 
-            let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as practitionerMetadata
-                FROM auth.users as U 
-                JOIN public.metadata as M on U.id = M.user_id
-                where U.last_seen IS NOT NULL AND M.user_type = 'practitioner'`;
+            // Base queries
+            let executeDataQuery = `SELECT to_jsonb(U) AS user, to_jsonb(M) AS practitionerMetadata
+            FROM auth.users AS U JOIN public.metadata AS M ON U.id = M.user_id
+            WHERE U.last_seen IS NOT NULL AND M.user_type = 'practitioner'`;
 
-            let executeCountQuery = `SELECT COUNT(*) as count FROM auth.users as U
-                JOIN public.metadata as M on U.id = M.user_id
-                WHERE U.last_seen IS NOT NULL AND M.user_type = 'practitioner'`;
+            let executeCountQuery = `SELECT COUNT(*) AS count
+            FROM auth.users AS U JOIN public.metadata AS M ON U.id = M.user_id
+            WHERE U.last_seen IS NOT NULL AND M.user_type = 'practitioner'`;
 
-            executeDataQuery += ` ORDER BY U.created_at DESC LIMIT :pageSize OFFSET :offset`;
+            // Dynamic filters
+            const filtersArr: string[] = [];
+            const replacements: any = {
+                pageSize,
+                offset: (pageNumber - 1) * pageSize,
+            };
 
-            const users = await this.userModel?.sequelize?.query(
-                executeDataQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                    replacements: {
-                        pageSize: pageSize,
-                        offset: (pageNumber - 1) * pageSize,
-                    },
+            if (searchTerm) {
+                filtersArr.push(`(U.email ILIKE :searchTerm OR U.display_name ILIKE :searchTerm
+                    OR M.first_name ILIKE :searchTerm OR M.last_name ILIKE :searchTerm
+                    OR M.username ILIKE :searchTerm)`);
+                replacements.searchTerm = `%${searchTerm}%`;
+            }
+
+            if (gift === 'true' || gift === 'false') {
+                filtersArr.push(`M.gift = ${gift === 'true'}`);
+            }
+
+            // Apply filters
+            if (filtersArr.length > 0) {
+                const whereClause = ' AND ' + filtersArr.join(' AND ');
+                executeDataQuery += whereClause;
+                executeCountQuery += whereClause;
+            }
+
+            // Sorting
+            const allowedUserCols = ['last_seen', 'email', 'created_at'];
+            const allowedMetaCols = ['first_name', 'last_name', 'username', 'cycle', 'pro_day', 'plan', 'renewalNumber', 'revCatTrial'];
+
+            if (sortBy && sortOrder) {
+                if (allowedUserCols.includes(sortBy)) {
+                    executeDataQuery += ` ORDER BY U.${sortBy} ${sortOrder.toUpperCase()}`;
+                } else if (allowedMetaCols.includes(sortBy)) {
+                    executeDataQuery += ` ORDER BY M."${sortBy}" ${sortOrder.toUpperCase()}`;
                 }
-            );
+            } else {
+                executeDataQuery += ` ORDER BY U.last_seen DESC`;
+            }
 
-            const totalCount: any = await this.userModel?.sequelize?.query(
-                executeCountQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                }
-            );
+            // Pagination
+            executeDataQuery += ` LIMIT :pageSize OFFSET :offset`;
+
+            // --- Execute Queries ---
+            const users = await this.userModel?.sequelize?.query(executeDataQuery, {
+                type: QueryTypes.SELECT,
+                raw: true,
+                replacements,
+            });
+
+            const totalCount: any = await this.userModel?.sequelize?.query(executeCountQuery, {
+                type: QueryTypes.SELECT,
+                raw: true,
+                replacements: searchTerm ? { searchTerm: `%${searchTerm}%` } : undefined,
+            });
 
             return {
-                success: true, data: {
-                    rows: users,
-                    count: totalCount[0]?.count || 0,
-                },
+                success: true,
+                data: { rows: users, count: totalCount[0]?.count || 0 },
                 message: 'Users fetched successfully',
             };
 
         } catch (error) {
             console.error(error, "---error---13");
+            throw new BadRequestException(error.message);
         }
     }
+
+
+    // async findAllPractitionersList(pageNumber: number, pageSize: number, filters: FilterDto): Promise<any> {
+    //     try {
+
+    //         const { searchTerm, sortBy, sortOrder, selectedRole, gift } = filters;
+
+    //         let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as practitionerMetadata
+    //             FROM auth.users as U 
+    //             JOIN public.metadata as M on U.id = M.user_id
+    //             where U.last_seen IS NOT NULL AND M.user_type = 'practitioner'`;
+
+    //         let executeCountQuery = `SELECT COUNT(*) as count FROM auth.users as U
+    //             JOIN public.metadata as M on U.id = M.user_id
+    //             WHERE U.last_seen IS NOT NULL AND M.user_type = 'practitioner'`;
+
+    //         // --- Where Clauses ---
+    //         let whereClauses: string[] = [`U.last_seen IS NOT NULL`];
+    //         let filterOpts: any = {
+    //             pageSize,
+    //             offset: (pageNumber - 1) * pageSize,
+    //         };
+
+    //         if (searchTerm) {
+    //             whereClauses.push(`(U.email ILIKE :searchTerm OR U.display_name ILIKE :searchTerm
+    //             OR M.first_name ILIKE :searchTerm OR M.last_name ILIKE :searchTerm OR M.username ILIKE :searchTerm)`);
+    //             filterOpts.searchTerm = `%${searchTerm}%`;
+    //         }
+
+    //         if (gift && gift.toString() == 'true') {
+    //             whereClauses.push(`M.gift = ${gift === 'true'}`);
+    //         } else if (gift && gift.toString() == 'false') {
+    //             whereClauses.push(`M.gift = ${gift === 'false'}`);
+    //         }
+
+    //         // --- Apply WHERE ---
+    //         if (whereClauses.length > 0) {
+    //             executeDataQuery += ` WHERE ${whereClauses.join(' AND ')} `;
+    //             executeCountQuery += ` WHERE ${whereClauses.join(' AND ')} `;
+    //         }
+
+    //         // --- Sorting ---
+    //         if (sortBy && sortOrder) {
+    //             const allowedUserCols = ['last_seen', 'email'];
+    //             const allowedMetaCols = ['first_name', 'last_name', 'username', 'cycle', 'pro_day', 'plan', 'renewalNumber', 'revCatTrial'];
+    //             if (allowedUserCols.includes(sortBy)) {
+    //                 executeDataQuery += ` ORDER BY U.${sortBy} ${sortOrder.toUpperCase()} `;
+    //             } else if (allowedMetaCols.includes(sortBy)) {
+    //                 executeDataQuery += ` ORDER BY M."${sortBy}" ${sortOrder.toUpperCase()} `;
+    //             }
+    //         } else {
+    //             executeDataQuery += ` ORDER BY U.last_seen DESC `;
+    //         }
+
+    //         executeDataQuery += ` ORDER BY U.created_at DESC LIMIT :pageSize OFFSET :offset`;
+
+    //         const users = await this.userModel?.sequelize?.query(
+    //             executeDataQuery,
+    //             {
+    //                 type: QueryTypes.SELECT,
+    //                 raw: true,
+    //                 replacements: {
+    //                     pageSize: pageSize,
+    //                     offset: (pageNumber - 1) * pageSize,
+    //                 },
+    //             }
+    //         );
+
+    //         const totalCount: any = await this.userModel?.sequelize?.query(
+    //             executeCountQuery,
+    //             {
+    //                 type: QueryTypes.SELECT,
+    //                 raw: true,
+    //             }
+    //         );
+
+    //         return {
+    //             success: true, data: {
+    //                 rows: users,
+    //                 count: totalCount[0]?.count || 0,
+    //             },
+    //             message: 'Users fetched successfully',
+    //         };
+
+    //     } catch (error) {
+    //         console.error(error, "---error---13");
+    //     }
+    // }
 
     async fetchPractitionersDataForPdf(filters: FilterDto): Promise<any> {
         try {
@@ -169,7 +290,7 @@ export class PractitionerService {
                 }
 
                 const email = element.email.trim().toLowerCase();
-                
+
                 // Check if user already exists
                 let checkUserQuery = `SELECT id, email FROM auth.users WHERE email = :email`;
                 const checkUser: any = await this.userModel?.sequelize?.query(checkUserQuery, {
@@ -177,19 +298,19 @@ export class PractitionerService {
                     raw: true,
                     replacements: { email: email }
                 });
-                
+
                 if (checkUser.length > 0) {
                     console.log(`User ${email} already exists, skipping creation`);
                     continue;
                 } else {
                     console.log(`User ${email} does not exist, creating new user`);
                 }
-                
+
                 try {
                     const newUser = await this.userService.createNewUser(element);
                     if (newUser.success) {
                         console.log(`User ${email} created successfully`);
-    
+
                         let metadataCreateQuery = `INSERT INTO public.metadata (user_id, first_name, last_name, user_type, pro_day, cycle, gift, updated_at) 
                             VALUES (:userId, :first_name, :last_name, :user_type, :pro_day, :cycle, :gift, :updatedAt)`;
                         const metadataCreate: any = await this.userModel?.sequelize?.query(metadataCreateQuery, {

@@ -18,110 +18,209 @@ export class UsersService {
 
     async findAllUsersList(userType: string, pageNumber: number, pageSize: number, filters: FilterDto, practitionerId: string): Promise<IResponse> {
         try {
-            const { searchTerm, sortBy, sortOrder, selectedRole, gift, unsubscribed } = filters;
+            const { searchTerm, sortBy, sortOrder, selectedRole, gift } = filters;
 
-            let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as userMetadata,
-                COALESCE(followers.follower_count, 0) AS "followerCount",
-                COALESCE(following.following_count, 0) AS "followingCount"
-                FROM auth.users as U 
-                join public.metadata as M on U.id = M.user_id
-                LEFT JOIN (SELECT "follow_user_id" AS id, COUNT(*) AS follower_count
-                FROM public.user_follows GROUP BY "follow_user_id") AS followers ON followers.id = U.id
-                LEFT JOIN (SELECT "user_id" AS id, COUNT(*) AS following_count
-                FROM public.user_follows GROUP BY "user_id") AS following ON following.id = U.id`;
+            // Base queries
+            let executeDataQuery = `SELECT to_jsonb(U) AS user, to_jsonb(M) AS userMetadata,
+              COALESCE(followers.follower_count, 0) AS "followerCount",
+              COALESCE(following.following_count, 0) AS "followingCount"
+            FROM auth.users AS U JOIN public.metadata AS M ON U.id = M.user_id
+            LEFT JOIN (SELECT "follow_user_id" AS id, COUNT(*) AS follower_count
+              FROM public.user_follows GROUP BY "follow_user_id"
+            ) AS followers ON followers.id = U.id
+            LEFT JOIN (SELECT "user_id" AS id, COUNT(*) AS following_count
+              FROM public.user_follows GROUP BY "user_id"
+            ) AS following ON following.id = U.id`;
 
-            let executeCountQuery = `SELECT COUNT(*) as count FROM auth.users as U
-                JOIN public.metadata AS M on U.id = M.user_id`;
-            if (searchTerm) {
-                executeDataQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
-                executeCountQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
+            let executeCountQuery = `SELECT COUNT(*) AS count FROM auth.users AS U JOIN public.metadata AS M ON U.id = M.user_id`;
+
+            // --- Join with user_follows if practitionerId is present ---
+            if (practitionerId && practitionerId !== 'undefined') {
+                executeDataQuery += ` JOIN public.user_follows AS UF ON U.id = UF."follow_user_id" `;
+                executeCountQuery += ` JOIN public.user_follows AS UF ON U.id = UF."follow_user_id" `;
             }
 
-            if (userType === 'practitioner') {
-                executeDataQuery += ` AND M.user_type = 'practitioner'`;
-                executeCountQuery += ` AND M.user_type = 'practitioner'`;
-            }
-
-            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
-                executeDataQuery += ` JOIN public.user_follows AS UF ON U.id = UF."follow_user_id"
-                WHERE U.last_seen IS NOT NULL AND UF."user_id" = :practitionerId`;
-                executeCountQuery += ` JOIN public.user_follows AS UF ON U.id = UF."follow_user_id"
-                WHERE U.last_seen IS NOT NULL AND UF."user_id" = :practitionerId`;
-            } else {
-                executeDataQuery += ` WHERE U.last_seen IS NOT NULL`;
-                executeCountQuery += ` WHERE U.last_seen IS NOT NULL`;
-            }
-
-            if (gift && gift.toString() === 'true') {
-                executeDataQuery += ` AND M.gift = true`;
-                executeCountQuery += ` AND M.gift = true`;
-            } else if (gift && gift.toString() === 'false') {
-                executeDataQuery += ` AND M.gift = false`;
-                executeCountQuery += ` AND M.gift = false`;
-            }
-
-            if (unsubscribed && unsubscribed.toString() === 'true') {
-                executeDataQuery += ` AND M.unsubscribed = true`;
-                executeCountQuery += ` AND M.unsubscribed = true`;
-            } else if (unsubscribed && unsubscribed.toString() === 'false') {
-                executeDataQuery += ` AND M.unsubscribed = false`;
-                executeCountQuery += ` AND M.unsubscribed = false`;
-            }
-
-            if (selectedRole === 'practitioner') {
-                executeDataQuery += ` AND M.user_type = 'practitioner'`;
-                executeCountQuery += ` AND M.user_type = 'practitioner'`;
-            }
-
-            if (sortBy && sortOrder) {
-                if (sortBy === 'last_seen' || sortBy === 'email') {
-                    executeDataQuery += ` ORDER BY U.${sortBy} ${sortOrder}`;
-                } else if (sortBy === 'first_name' || sortBy === 'last_name' || sortBy === 'username' || sortBy === 'cycle' || sortBy === 'pro_day' || sortBy === 'plan' || sortBy === 'renewalNumber' || sortBy === 'revCatTrial') {
-                    executeDataQuery += ` ORDER BY M."${sortBy}" ${sortOrder}`;
-                }
-            } else {
-                executeDataQuery += ` ORDER BY U.last_seen DESC`;
-            }
-
-            executeDataQuery += ` LIMIT :pageSize OFFSET :offset`;
-
-            let filterOpts = {
-                pageSize: pageSize,
+            // --- Where Clauses ---
+            let whereClauses: string[] = [`U.last_seen IS NOT NULL`];
+            let filterOpts: any = {
+                pageSize,
                 offset: (pageNumber - 1) * pageSize,
-            }
-            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
-                filterOpts['practitionerId'] = practitionerId;
-            }
-            const users = await this.userModel?.sequelize?.query(executeDataQuery,
-                {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                    replacements: { ...filterOpts },
-                }
-            );
+            };
 
-            let queryOpts = {
+            if (practitionerId && practitionerId !== 'undefined') {
+                whereClauses.push(`UF."user_id" = :practitionerId`);
+                filterOpts.practitionerId = practitionerId;
+            }
+
+            if (searchTerm) {
+                whereClauses.push(`(U.email ILIKE :searchTerm OR U.display_name ILIKE :searchTerm
+                OR M.first_name ILIKE :searchTerm OR M.last_name ILIKE :searchTerm OR M.username ILIKE :searchTerm)`);
+                filterOpts.searchTerm = `%${searchTerm}%`;
+            }
+
+            if (userType === 'practitioner' || selectedRole === 'practitioner') {
+                whereClauses.push(`M.user_type = 'practitioner'`);
+            }
+
+            if (gift && gift.toString() == 'true') {
+                whereClauses.push(`M.gift = ${gift === 'true'}`);
+            } else if (gift && gift.toString() == 'false') {
+                whereClauses.push(`M.gift = ${gift === 'false'}`);
+            }
+
+            // --- Apply WHERE ---
+            if (whereClauses.length > 0) {
+                executeDataQuery += ` WHERE ${whereClauses.join(' AND ')} `;
+                executeCountQuery += ` WHERE ${whereClauses.join(' AND ')} `;
+            }
+
+            // --- Sorting ---
+            if (sortBy && sortOrder) {
+                const allowedUserCols = ['last_seen', 'email'];
+                const allowedMetaCols = ['first_name', 'last_name', 'username', 'cycle', 'pro_day', 'plan', 'renewalNumber', 'revCatTrial'];
+                if (allowedUserCols.includes(sortBy)) {
+                    executeDataQuery += ` ORDER BY U.${sortBy} ${sortOrder.toUpperCase()} `;
+                } else if (allowedMetaCols.includes(sortBy)) {
+                    executeDataQuery += ` ORDER BY M."${sortBy}" ${sortOrder.toUpperCase()} `;
+                }
+            } else {
+                executeDataQuery += ` ORDER BY U.last_seen DESC `;
+            }
+
+            // --- Pagination ---
+            executeDataQuery += ` LIMIT :pageSize OFFSET :offset `;
+
+            // --- Run Queries ---
+            const users = await this.userModel?.sequelize?.query(executeDataQuery, {
                 type: QueryTypes.SELECT,
                 raw: true,
-            }
-            if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
-                queryOpts['replacements'] = { practitionerId: practitionerId };
-            }
-            const totalCount: any = await this.userModel?.sequelize?.query(executeCountQuery,
-                { ...queryOpts });
+                replacements: filterOpts,
+            });
+
+            const totalCount: any = await this.userModel?.sequelize?.query(executeCountQuery, {
+                type: QueryTypes.SELECT,
+                raw: true,
+                replacements: filterOpts,
+            });
 
             return {
-                success: true, data: {
-                    rows: users,
-                    count: totalCount[0]?.count || 0,
-                },
+                success: true,
+                data: { rows: users, count: totalCount[0]?.count || 0 },
                 message: 'Users fetched successfully',
             };
         } catch (error) {
-            console.error(error, "---error---");
+            console.error('---error---', error);
             throw new BadRequestException(error.message);
         }
     }
+
+
+    // async findAllUsersList(userType: string, pageNumber: number, pageSize: number, filters: FilterDto, practitionerId: string): Promise<IResponse> {
+    //     try {
+    //         const { searchTerm, sortBy, sortOrder, selectedRole, gift, unsubscribed } = filters;
+
+    //         let executeDataQuery = `SELECT to_jsonb(U) as user, to_jsonb(M) as userMetadata,
+    //             COALESCE(followers.follower_count, 0) AS "followerCount",
+    //             COALESCE(following.following_count, 0) AS "followingCount"
+    //             FROM auth.users as U 
+    //             join public.metadata as M on U.id = M.user_id
+    //             LEFT JOIN (SELECT "follow_user_id" AS id, COUNT(*) AS follower_count
+    //             FROM public.user_follows GROUP BY "follow_user_id") AS followers ON followers.id = U.id
+    //             LEFT JOIN (SELECT "user_id" AS id, COUNT(*) AS following_count
+    //             FROM public.user_follows GROUP BY "user_id") AS following ON following.id = U.id`;
+
+    //         let executeCountQuery = `SELECT COUNT(*) as count FROM auth.users as U
+    //             JOIN public.metadata AS M on U.id = M.user_id`;
+    //         if (searchTerm) {
+    //             executeDataQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
+    //             executeCountQuery += ` AND (U.email ILIKE '%${searchTerm}%' OR U.display_name ILIKE '%${searchTerm}%' OR M.first_name ILIKE '%${searchTerm}%' OR M.last_name ILIKE '%${searchTerm}%' OR M.username ILIKE '%${searchTerm}%')`;
+    //         }
+
+    //         if (userType === 'practitioner') {
+    //             executeDataQuery += ` AND M.user_type = 'practitioner'`;
+    //             executeCountQuery += ` AND M.user_type = 'practitioner'`;
+    //         }
+
+    //         if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+    //             executeDataQuery += ` JOIN public.user_follows AS UF ON U.id = UF."follow_user_id"
+    //             WHERE U.last_seen IS NOT NULL AND UF."user_id" = :practitionerId`;
+    //             executeCountQuery += ` JOIN public.user_follows AS UF ON U.id = UF."follow_user_id"
+    //             WHERE U.last_seen IS NOT NULL AND UF."user_id" = :practitionerId`;
+    //         } else {
+    //             executeDataQuery += ` WHERE U.last_seen IS NOT NULL`;
+    //             executeCountQuery += ` WHERE U.last_seen IS NOT NULL`;
+    //         }
+
+    //         if (gift && gift.toString() === 'true') {
+    //             executeDataQuery += ` AND M.gift = true`;
+    //             executeCountQuery += ` AND M.gift = true`;
+    //         } else if (gift && gift.toString() === 'false') {
+    //             executeDataQuery += ` AND M.gift = false`;
+    //             executeCountQuery += ` AND M.gift = false`;
+    //         }
+
+    //         if (unsubscribed && unsubscribed.toString() === 'true') {
+    //             executeDataQuery += ` AND M.unsubscribed = true`;
+    //             executeCountQuery += ` AND M.unsubscribed = true`;
+    //         } else if (unsubscribed && unsubscribed.toString() === 'false') {
+    //             executeDataQuery += ` AND M.unsubscribed = false`;
+    //             executeCountQuery += ` AND M.unsubscribed = false`;
+    //         }
+
+    //         if (selectedRole === 'practitioner') {
+    //             executeDataQuery += ` AND M.user_type = 'practitioner'`;
+    //             executeCountQuery += ` AND M.user_type = 'practitioner'`;
+    //         }
+
+    //         if (sortBy && sortOrder) {
+    //             if (sortBy === 'last_seen' || sortBy === 'email') {
+    //                 executeDataQuery += ` ORDER BY U.${sortBy} ${sortOrder}`;
+    //             } else if (sortBy === 'first_name' || sortBy === 'last_name' || sortBy === 'username' || sortBy === 'cycle' || sortBy === 'pro_day' || sortBy === 'plan' || sortBy === 'renewalNumber' || sortBy === 'revCatTrial') {
+    //                 executeDataQuery += ` ORDER BY M."${sortBy}" ${sortOrder}`;
+    //             }
+    //         } else {
+    //             executeDataQuery += ` ORDER BY U.last_seen DESC`;
+    //         }
+
+    //         executeDataQuery += ` LIMIT :pageSize OFFSET :offset`;
+
+    //         let filterOpts = {
+    //             pageSize: pageSize,
+    //             offset: (pageNumber - 1) * pageSize,
+    //         }
+    //         if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+    //             filterOpts['practitionerId'] = practitionerId;
+    //         }
+    //         const users = await this.userModel?.sequelize?.query(executeDataQuery,
+    //             {
+    //                 type: QueryTypes.SELECT,
+    //                 raw: true,
+    //                 replacements: { ...filterOpts },
+    //             }
+    //         );
+
+    //         let queryOpts = {
+    //             type: QueryTypes.SELECT,
+    //             raw: true,
+    //         }
+    //         if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
+    //             queryOpts['replacements'] = { practitionerId: practitionerId };
+    //         }
+    //         const totalCount: any = await this.userModel?.sequelize?.query(executeCountQuery,
+    //             { ...queryOpts });
+
+    //         return {
+    //             success: true, data: {
+    //                 rows: users,
+    //                 count: totalCount[0]?.count || 0,
+    //             },
+    //             message: 'Users fetched successfully',
+    //         };
+    //     } catch (error) {
+    //         console.error(error, "---error---");
+    //         throw new BadRequestException(error.message);
+    //     }
+    // }
 
     async fetchUserDetailsById(id: string): Promise<any> {
         try {
@@ -1520,10 +1619,10 @@ export class UsersService {
                 }
             );
 
-            let subscribedUserCount : any = 0;
-            if (patientIds.length>0 && practitionerId.length>0 && practitionerId !== 'undefined') {
+            let subscribedUserCount: any = 0;
+            if (patientIds.length > 0 && practitionerId.length > 0 && practitionerId !== 'undefined') {
                 const subsQuery = `SELECT COUNT(DISTINCT(user_id)) as "subscribedUserCount" FROM public.metadata WHERE user_id IN (:patientIds) AND plan not in ('free')`;
-                let subscribedUserCountData : any = await this.userModel?.sequelize?.query(
+                let subscribedUserCountData: any = await this.userModel?.sequelize?.query(
                     subsQuery,
                     {
                         type: QueryTypes.SELECT,
@@ -1549,7 +1648,7 @@ export class UsersService {
                 console.log(subscribedUserData, "subscribedUserData");
                 subscribedUserCount = subscribedUserData.value || 0;
             }
-            
+
             const giftedUserCount: any = await this.userModel?.sequelize?.query(
                 giftedUserQuery,
                 {
@@ -1849,7 +1948,7 @@ export class UsersService {
                 
                     FROM public.answers AS "A"
                     WHERE "A"."question_slug" = 'personal-08-anthro-height' AND "A"."uid" = :cycle`;
-                    
+
                 let heightReplaceFilterOpts = {
                     cycle: 'cycle-' + i
                 }
@@ -2023,10 +2122,10 @@ export class UsersService {
 
             let filterOpts = {}
             if (patientIds.length > 0) {
-                executeAdherenceModInfoQuery = executeAdherenceModInfoQuery.replace("/**WHERE_CONDITION**/",` AND "A"."user_id" IN (:patientIds)`);
+                executeAdherenceModInfoQuery = executeAdherenceModInfoQuery.replace("/**WHERE_CONDITION**/", ` AND "A"."user_id" IN (:patientIds)`);
                 filterOpts['patientIds'] = patientIds;
             } else {
-                executeAdherenceModInfoQuery = executeAdherenceModInfoQuery.replace("/**WHERE_CONDITION**/",'');
+                executeAdherenceModInfoQuery = executeAdherenceModInfoQuery.replace("/**WHERE_CONDITION**/", '');
             }
             const adherenceModInfoList: any = await this.userModel?.sequelize?.query(
                 executeAdherenceModInfoQuery,
@@ -2052,10 +2151,10 @@ export class UsersService {
                 SELECT jsonb_object_agg(question_slug, mods) AS result FROM per_slug;`;
 
             if (patientIds.length > 0) {
-                executeAdherenceReassessInfoQuery = executeAdherenceReassessInfoQuery.replace("/**WHERE_CONDITION**/",` AND "A"."user_id" IN (:patientIds)`);
+                executeAdherenceReassessInfoQuery = executeAdherenceReassessInfoQuery.replace("/**WHERE_CONDITION**/", ` AND "A"."user_id" IN (:patientIds)`);
                 filterOpts['patientIds'] = patientIds;
             } else {
-                executeAdherenceReassessInfoQuery = executeAdherenceReassessInfoQuery.replace("/**WHERE_CONDITION**/",'');
+                executeAdherenceReassessInfoQuery = executeAdherenceReassessInfoQuery.replace("/**WHERE_CONDITION**/", '');
             }
             const adherenceReassessInfoList: any = await this.userModel?.sequelize?.query(
                 executeAdherenceReassessInfoQuery,
@@ -2114,10 +2213,25 @@ export class UsersService {
 
     async getAnalyticsTab5Data(practitionerId: string): Promise<any> {
         try {
-            let patientIds = [];
+            let patientIds: any[] = [];
             if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
                 patientIds = await this.getPatientByPractitionerId(practitionerId);
             }
+
+            let executeDistinctUserQuery = `SELECT user_id FROM public.answers WHERE uid = 'cycle-0' AND values <> '""'
+                    AND question_slug IN ('personal-12-health-food','personal-13-health-body','personal-14-health-cooking','personal-15-health-meditation','personal-16-health-sleep-hours','personal-17-health-sleep-qual')`
+            if (patientIds.length > 0) {
+                executeDistinctUserQuery += ` AND user_id IN (:patientIds) GROUP BY user_id HAVING COUNT(DISTINCT question_slug) = 6;`;
+            } else {
+                executeDistinctUserQuery += ` GROUP BY user_id HAVING COUNT(DISTINCT question_slug) = 6;`;
+            }
+
+            let userResult: any = await this.userModel?.sequelize?.query(
+                executeDistinctUserQuery,
+                { type: QueryTypes.SELECT, raw: true, replacements: { patientIds: patientIds } }
+            );
+            let userIds = userResult.map((dt: any) => dt.user_id)
+            patientIds = Array.from(new Set(userIds));
 
             let executeFeedbackQuery = `WITH base_questions AS (SELECT unnest(ARRAY['personal-12-health-food','personal-13-health-body','personal-14-health-cooking','personal-15-health-meditation','personal-16-health-sleep-hours','personal-17-health-sleep-qual']) AS base_slug),
                 ques AS (SELECT CASE WHEN :cycle = 'cycle-0' THEN base_slug ELSE 'reassess-03-' || base_slug END AS question_slug
@@ -2150,18 +2264,14 @@ export class UsersService {
                     cycle: 'cycle-' + i
                 }
                 if (patientIds.length > 0) {
-                    executeFeedbackQuery = executeFeedbackQuery.replace("/**WHERE_CONDITION**/",` AND "A"."user_id" IN (:patientIds)`);
+                    executeFeedbackQuery = executeFeedbackQuery.replace("/**WHERE_CONDITION**/", ` AND "A"."user_id" IN (:patientIds)`);
                     filterOpts['patientIds'] = patientIds;
                 } else {
-                    executeFeedbackQuery = executeFeedbackQuery.replace("/**WHERE_CONDITION**/",'');
+                    executeFeedbackQuery = executeFeedbackQuery.replace("/**WHERE_CONDITION**/", '');
                 }
                 let result: any = await this.userModel?.sequelize?.query(
                     executeFeedbackQuery,
-                    {
-                        type: QueryTypes.SELECT,
-                        raw: true,
-                        replacements: { ...filterOpts }
-                    }
+                    { type: QueryTypes.SELECT, raw: true, replacements: { ...filterOpts } }
                 );
 
                 feedback.push({
@@ -2184,6 +2294,21 @@ export class UsersService {
             if (practitionerId && practitionerId.length > 0 && practitionerId !== 'undefined') {
                 patientIds = await this.getPatientByPractitionerId(practitionerId);
             }
+
+            let executeDistinctUserQuery = `SELECT user_id FROM public.answers WHERE uid = 'cycle-0' AND values <> '""'
+                    AND question_slug IN ('personal-12-health-food','personal-13-health-body','personal-14-health-cooking','personal-15-health-meditation','personal-16-health-sleep-hours','personal-17-health-sleep-qual')`
+            if (patientIds.length > 0) {
+                executeDistinctUserQuery += ` AND user_id IN (:patientIds) GROUP BY user_id HAVING COUNT(DISTINCT question_slug) = 6;`;
+            } else {
+                executeDistinctUserQuery += ` GROUP BY user_id HAVING COUNT(DISTINCT question_slug) = 6;`;
+            }
+
+            let userResult: any = await this.userModel?.sequelize?.query(
+                executeDistinctUserQuery,
+                { type: QueryTypes.SELECT, raw: true, replacements: { patientIds: patientIds } }
+            );
+            let userIds = userResult.map((dt: any) => dt.user_id)
+            patientIds = Array.from(new Set(userIds));
 
             let executeBaselineDataQuery = `WITH question_stats AS (SELECT 
                         SQ.survey_slug, COUNT(*) FILTER (WHERE A.values::text = '""')::int AS missing_count,
@@ -2208,10 +2333,10 @@ export class UsersService {
                 FROM survey_aggregated`;
             let filterOpts = {}
             if (patientIds.length > 0) {
-                executeBaselineDataQuery = executeBaselineDataQuery.replace("/**WHERE_CONDITION**/",` AND A.user_id IN (:patientIds)`);
+                executeBaselineDataQuery = executeBaselineDataQuery.replace("/**WHERE_CONDITION**/", ` AND A.user_id IN (:patientIds)`);
                 filterOpts['patientIds'] = patientIds;
             } else {
-                executeBaselineDataQuery = executeBaselineDataQuery.replace("/**WHERE_CONDITION**/",'');
+                executeBaselineDataQuery = executeBaselineDataQuery.replace("/**WHERE_CONDITION**/", '');
             }
             const baselineData: any = await this.userModel?.sequelize?.query(
                 executeBaselineDataQuery,
@@ -2250,10 +2375,10 @@ export class UsersService {
                     cycle: 'cycle-' + i
                 }
                 if (patientIds.length > 0) {
-                    executeReassessDataQuery = executeReassessDataQuery.replace("/**WHERE_CONDITION**/",` AND A.user_id IN (:patientIds)`);
+                    executeReassessDataQuery = executeReassessDataQuery.replace("/**WHERE_CONDITION**/", ` AND A.user_id IN (:patientIds)`);
                     filterOpts['patientIds'] = patientIds;
                 } else {
-                    executeReassessDataQuery = executeReassessDataQuery.replace("/**WHERE_CONDITION**/",'');
+                    executeReassessDataQuery = executeReassessDataQuery.replace("/**WHERE_CONDITION**/", '');
                 }
                 let result: any = await this.userModel?.sequelize?.query(
                     executeReassessDataQuery,
@@ -2460,7 +2585,7 @@ export class UsersService {
                 }
 
                 const email = element.email.trim().toLowerCase();
-                
+
                 // Check if user already exists
                 let checkUserQuery = `SELECT id, email FROM auth.users WHERE email = :email`;
                 const checkUser: any = await this.userModel?.sequelize?.query(checkUserQuery, {
@@ -2468,20 +2593,20 @@ export class UsersService {
                     raw: true,
                     replacements: { email: email }
                 });
-                
+
                 if (checkUser.length > 0) {
                     console.log(`User ${email} already exists, skipping creation`);
                     continue;
                 }
 
                 console.log(`User ${email} does not exist, creating new user`);
-                
+
                 try {
                     const newUser = await this.createNewUser(element);
                     console.log(newUser, "---newUser---");
                     if (newUser.success) {
                         console.log(`User ${email} created successfully`);
-    
+
                         // let metadataCreateQuery = `INSERT INTO public.metadata (user_id, first_name, last_name, user_type, pro_day, cycle, gift, updated_at) 
                         //     VALUES (:userId, :first_name, :last_name, :user_type, :pro_day, :cycle, :gift, :updatedAt)`;
                         // const metadataCreate: any = await this.userModel?.sequelize?.query(metadataCreateQuery, {
@@ -2555,81 +2680,81 @@ export class UsersService {
                 return '';
             }
 
-            let finalResponse : any[] = [];
+            let finalResponse: any[] = [];
             for (let i = 0; i < userIds.length; i++) {
                 let finalResp02 = {
-                    "UserId" : "",
-                    "UserType" : "",
-                    "Prac_Type" : "",
-                    "Prac_Use" : "",
-                    "Perc_Day_Food" : "",
-                    "Diets_Life" : "",
-                    "Perc_Day_Body" : "",
-                    "BI_Anx" : "",
-                    "Comf_Cook" : "",
-                    "Comf_Med" : "",
-                    "Hrs_Sleep" : "",
-                    "Sleep_Qual" : "",
-                    "Age" : "",
-                    "Gender" : "",
-                    "Race_Eth" : "",
-                    "Highest_Edu" : "",
-                    "Parental_Edu" : "",
-                    "Cont" : "", 
-                    "Height" : "",
-                    "Weight" : "",
-                    "High_Ad_Wt" : "",
-                    "Low_Ad_Wt" : "",
-                    "Weigh_Often" : "",
-                    "FoodLog_Count" : "",
-                    "Review_Count" : "",
-                    "Avg_Logs_Day" : "",
-                    "Avg_Freq_F" : "",
-                    "Avg_Freq_V" : "",
-                    "Avg_Freq_G" : "",
-                    "Avg_Freq_D" : "",
-                    "Avg_Freq_P" : "",
-                    "Avg_Freq_BNS" : "",
-                    "ADHDA_1" : "",
-                    "ADHDA_TOT" : "",
-                    "ACE_TOT" : "",
-                    "Ad_FoodLog" : "",
-                    "Ad_NightlyRev" : "",
-                    "Weight_Post1" : "",
-                    "Weigh_Often_Post1" : "",
-                    "Perc_Day_Food_Post1" : "",
-                    "Perc_Day_Body_Post1" : "",
-                    "Comf_Cook_Post1" : "",
-                    "Comf_Med_Post1" : "",
-                    "Hrs_Sleep_Post1" : "",
-                    "Sleep_Qual_Post1" : "",
-                    "Weight_Post2" : "",
-                    "Weigh_Often_Post2" : "",
-                    "Perc_Day_Food_Post2" : "",
-                    "Perc_Day_Body_Post2" : "",
-                    "Comf_Cook_Post2" : "",
-                    "Comf_Med_Post2" : "",
-                    "Hrs_Sleep_Post2" : "",
-                    "Sleep_Qual_Post2" : "",
-                    "ADHDA_1_Post1" : "",
-                    "ADHDA_TOT_Post1" : "",
+                    "UserId": "",
+                    "UserType": "",
+                    "Prac_Type": "",
+                    "Prac_Use": "",
+                    "Perc_Day_Food": "",
+                    "Diets_Life": "",
+                    "Perc_Day_Body": "",
+                    "BI_Anx": "",
+                    "Comf_Cook": "",
+                    "Comf_Med": "",
+                    "Hrs_Sleep": "",
+                    "Sleep_Qual": "",
+                    "Age": "",
+                    "Gender": "",
+                    "Race_Eth": "",
+                    "Highest_Edu": "",
+                    "Parental_Edu": "",
+                    "Cont": "",
+                    "Height": "",
+                    "Weight": "",
+                    "High_Ad_Wt": "",
+                    "Low_Ad_Wt": "",
+                    "Weigh_Often": "",
+                    "FoodLog_Count": "",
+                    "Review_Count": "",
+                    "Avg_Logs_Day": "",
+                    "Avg_Freq_F": "",
+                    "Avg_Freq_V": "",
+                    "Avg_Freq_G": "",
+                    "Avg_Freq_D": "",
+                    "Avg_Freq_P": "",
+                    "Avg_Freq_BNS": "",
+                    "ADHDA_1": "",
+                    "ADHDA_TOT": "",
+                    "ACE_TOT": "",
+                    "Ad_FoodLog": "",
+                    "Ad_NightlyRev": "",
+                    "Weight_Post1": "",
+                    "Weigh_Often_Post1": "",
+                    "Perc_Day_Food_Post1": "",
+                    "Perc_Day_Body_Post1": "",
+                    "Comf_Cook_Post1": "",
+                    "Comf_Med_Post1": "",
+                    "Hrs_Sleep_Post1": "",
+                    "Sleep_Qual_Post1": "",
+                    "Weight_Post2": "",
+                    "Weigh_Often_Post2": "",
+                    "Perc_Day_Food_Post2": "",
+                    "Perc_Day_Body_Post2": "",
+                    "Comf_Cook_Post2": "",
+                    "Comf_Med_Post2": "",
+                    "Hrs_Sleep_Post2": "",
+                    "Sleep_Qual_Post2": "",
+                    "ADHDA_1_Post1": "",
+                    "ADHDA_TOT_Post1": "",
                 };
                 const userId = userIds[i];
                 finalResp02.UserId = userId;
-                
-                const userData : any = await this.userModel?.sequelize?.query(`SELECT user_type from public.metadata where user_id = :userId`,
+
+                const userData: any = await this.userModel?.sequelize?.query(`SELECT user_type from public.metadata where user_id = :userId`,
                     { type: QueryTypes.SELECT, raw: true, replacements: { userId: userId } }
                 );
                 finalResp02.UserType = userData[0].user_type || '';
 
                 // Cycle-0 Data
-                let commonSlug = ['intake-03-anxiety-09-extra','intake-03-anxiety-09-extra','intake-08-ed-13-extra','onboarding-goals-why-here','onboarding-goals-why-now','onboarding-practitioner-type','onboarding-practitioner-use','personal-01-demo-age','personal-02-demo-gender','personal-03-demo-ethnicity','personal-04-demo-edu','personal-05-demo-par-edu','personal-06-demo-continent','personal-08-anthro-height','personal-08-anthro-weight','personal-09-anthro-weight-high','personal-10-anthro-weight-low','personal-11-anthro-weight-freq','personal-12-health-food','personal-13-health-body','personal-14-health-cooking','personal-15-health-meditation','personal-16-health-sleep-hours','personal-17-health-sleep-qual'];
+                let commonSlug = ['intake-03-anxiety-09-extra', 'intake-03-anxiety-09-extra', 'intake-08-ed-13-extra', 'onboarding-goals-why-here', 'onboarding-goals-why-now', 'onboarding-practitioner-type', 'onboarding-practitioner-use', 'personal-01-demo-age', 'personal-02-demo-gender', 'personal-03-demo-ethnicity', 'personal-04-demo-edu', 'personal-05-demo-par-edu', 'personal-06-demo-continent', 'personal-08-anthro-height', 'personal-08-anthro-weight', 'personal-09-anthro-weight-high', 'personal-10-anthro-weight-low', 'personal-11-anthro-weight-freq', 'personal-12-health-food', 'personal-13-health-body', 'personal-14-health-cooking', 'personal-15-health-meditation', 'personal-16-health-sleep-hours', 'personal-17-health-sleep-qual'];
                 let initialInfoDataQuery = `Select jsonb_agg(jsonb_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id")) as "questionInfoObj"
                     FROM public.answers AS "A"
                     LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
                     WHERE "A"."user_id" = :userId AND "A"."question_slug" in (:commonSlug) AND "A"."uid" = :uid
                     GROUP BY "A"."user_id"`;
-                const initialInfoData : any = await this.userModel?.sequelize?.query(initialInfoDataQuery,
+                const initialInfoData: any = await this.userModel?.sequelize?.query(initialInfoDataQuery,
                     { type: QueryTypes.SELECT, raw: true, replacements: { userId: userId, commonSlug: commonSlug, uid: 'cycle-0' } }
                 );
 
@@ -2657,35 +2782,35 @@ export class UsersService {
                 finalResp02.Sleep_Qual = getQuestionInfoValue('personal-17-health-sleep-qual', initialInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'personal-17-health-sleep-qual')?.ansValue, initialInfoData) || '';
 
                 // Cycle-1 & 2 Data
-                let commonSlugReassess = ['reassess-03-personal-08-anthro-weight','reassess-03-personal-11-anthro-weight-freq','reassess-03-personal-12-health-food','reassess-03-personal-13-health-body','reassess-03-personal-14-health-cooking','reassess-03-personal-15-health-meditation','reassess-03-personal-16-health-sleep-hours','reassess-03-personal-17-health-sleep-qual'];
-                for (let ind = 1; ind < 3; ind++) {                    
+                let commonSlugReassess = ['reassess-03-personal-08-anthro-weight', 'reassess-03-personal-11-anthro-weight-freq', 'reassess-03-personal-12-health-food', 'reassess-03-personal-13-health-body', 'reassess-03-personal-14-health-cooking', 'reassess-03-personal-15-health-meditation', 'reassess-03-personal-16-health-sleep-hours', 'reassess-03-personal-17-health-sleep-qual'];
+                for (let ind = 1; ind < 3; ind++) {
                     let reassessInfoDataQuery = `Select jsonb_agg(jsonb_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id")) as "questionInfoObj"
                         FROM public.answers AS "A"
                         LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
                         WHERE "A"."user_id" = :userId AND "A"."question_slug" in (:commonSlug) AND "A"."uid" = :uid
                         GROUP BY "A"."user_id"`;
-                    const reassessInfoData : any = await this.userModel?.sequelize?.query(reassessInfoDataQuery,
+                    const reassessInfoData: any = await this.userModel?.sequelize?.query(reassessInfoDataQuery,
                         { type: QueryTypes.SELECT, raw: true, replacements: { userId: userId, commonSlug: commonSlugReassess, uid: `cycle-${ind}` } }
                     );
                     if (ind === 1) {
-                        finalResp02.Weight_Post1 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-08-anthro-weight', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-08-anthro-weight')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Weigh_Often_Post1 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-11-anthro-weight-freq', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-11-anthro-weight-freq')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Perc_Day_Food_Post1 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-12-health-food', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-12-health-food')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Perc_Day_Body_Post1 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-13-health-body', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-13-health-body')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Comf_Cook_Post1 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-14-health-cooking', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-14-health-cooking')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Comf_Med_Post1 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-15-health-meditation', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-15-health-meditation')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Hrs_Sleep_Post1 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-16-health-sleep-hours', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-16-health-sleep-hours')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Sleep_Qual_Post1 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-17-health-sleep-qual', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-17-health-sleep-qual')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Weight_Post1 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-08-anthro-weight', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-08-anthro-weight')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Weigh_Often_Post1 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-11-anthro-weight-freq', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-11-anthro-weight-freq')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Perc_Day_Food_Post1 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-12-health-food', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-12-health-food')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Perc_Day_Body_Post1 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-13-health-body', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-13-health-body')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Comf_Cook_Post1 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-14-health-cooking', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-14-health-cooking')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Comf_Med_Post1 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-15-health-meditation', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-15-health-meditation')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Hrs_Sleep_Post1 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-16-health-sleep-hours', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-16-health-sleep-hours')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Sleep_Qual_Post1 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-17-health-sleep-qual', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-17-health-sleep-qual')?.ansValue, reassessInfoData) : '';
                     }
                     if (ind === 2) {
-                        finalResp02.Weight_Post2 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-08-anthro-weight', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-08-anthro-weight')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Weigh_Often_Post2 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-11-anthro-weight-freq', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-11-anthro-weight-freq')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Perc_Day_Food_Post2 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-12-health-food', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-12-health-food')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Perc_Day_Body_Post2 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-13-health-body', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-13-health-body')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Comf_Cook_Post2 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-14-health-cooking', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-14-health-cooking')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Comf_Med_Post2 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-15-health-meditation', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-15-health-meditation')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Hrs_Sleep_Post2 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-16-health-sleep-hours', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-16-health-sleep-hours')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Sleep_Qual_Post2 = reassessInfoData.length>0 ? getQuestionInfoValue('reassess-03-personal-17-health-sleep-qual', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-17-health-sleep-qual')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Weight_Post2 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-08-anthro-weight', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-08-anthro-weight')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Weigh_Often_Post2 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-11-anthro-weight-freq', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-11-anthro-weight-freq')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Perc_Day_Food_Post2 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-12-health-food', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-12-health-food')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Perc_Day_Body_Post2 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-13-health-body', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-13-health-body')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Comf_Cook_Post2 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-14-health-cooking', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-14-health-cooking')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Comf_Med_Post2 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-15-health-meditation', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-15-health-meditation')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Hrs_Sleep_Post2 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-16-health-sleep-hours', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-16-health-sleep-hours')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Sleep_Qual_Post2 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-17-health-sleep-qual', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-17-health-sleep-qual')?.ansValue, reassessInfoData) : '';
                     }
                 }
 
@@ -2701,65 +2826,65 @@ export class UsersService {
                 finalResp02.Avg_Freq_P = foodLogsDataResponse.data.averageFoodLogsPerDay['Protein (P)'] || 0;
                 finalResp02.Avg_Freq_BNS = foodLogsDataResponse.data.averageFoodLogsPerDay['Beans/Nuts/Seeds (BNS)'] || 0;
 
-                let mentalIntakeSlugs = ['intake-01-adhd-a-01','intake-01-adhd-a-02','intake-01-adhd-a-03','intake-01-adhd-a-04','intake-01-adhd-a-05','intake-01-adhd-a-06','intake-01-adhd-a-07','intake-01-adhd-a-08','intake-01-adhd-a-09',
-                    'intake-02-adhd-b-10','intake-02-adhd-b-11','intake-02-adhd-b-12','intake-02-adhd-b-13','intake-02-adhd-b-14','intake-02-adhd-b-15','intake-02-adhd-b-16','intake-02-adhd-b-17','intake-02-adhd-b-18',
-                    'intake-03-anxiety-00','intake-03-anxiety-01','intake-03-anxiety-02','intake-03-anxiety-03','intake-03-anxiety-04','intake-03-anxiety-05','intake-03-anxiety-06','intake-03-anxiety-07','intake-03-anxiety-08','intake-03-anxiety-09',
-                    'intake-04-depression-00','intake-04-depression-01','intake-04-depression-02','intake-04-depression-03','intake-04-depression-04','intake-04-depression-05','intake-04-depression-06','intake-04-depression-07','intake-04-depression-08','intake-04-depression-09','intake-04-depression-10-mod',
-                    'intake-05-ptsd-00','intake-05-ptsd-01','intake-05-ptsd-02','intake-05-ptsd-03','intake-05-ptsd-04','intake-05-ptsd-05','intake-05-ptsd-06','intake-05-ptsd-07','intake-05-ptsd-08','intake-05-ptsd-09','intake-05-ptsd-10','intake-05-ptsd-11','intake-05-ptsd-12','intake-05-ptsd-13','intake-05-ptsd-14','intake-05-ptsd-15','intake-05-ptsd-16','intake-05-ptsd-17','intake-05-ptsd-18','intake-05-ptsd-19',
-                    'intake-06-sud-00','intake-06-sud-01','intake-06-sud-02','intake-06-sud-03','intake-06-sud-04','intake-06-sud-05','intake-06-sud-06',
-                    'intake-07-fa-00','intake-07-fa-01','intake-07-fa-02','intake-07-fa-03','intake-07-fa-04','intake-07-fa-05','intake-07-fa-06','intake-07-fa-07','intake-07-fa-08','intake-07-fa-09','intake-07-fa-10','intake-07-fa-11','intake-07-fa-12','intake-07-fa-13',
-                    'intake-08-ed-00','intake-08-ed-01','intake-08-ed-02','intake-08-ed-03','intake-08-ed-04','intake-08-ed-05','intake-08-ed-06','intake-08-ed-07','intake-08-ed-08','intake-08-ed-09','intake-08-ed-10','intake-08-ed-10-next','intake-08-ed-11','intake-08-ed-12','intake-08-ed-13-extra',
-                    'intake-09-resilience-00','intake-09-resilience-01','intake-09-resilience-02','intake-09-resilience-03','intake-09-resilience-04','intake-09-resilience-05','intake-09-resilience-06',
-                    'intake-10-social-support-00','intake-10-social-support-01','intake-10-social-support-02','intake-10-social-support-03','intake-10-social-support-04','intake-10-social-support-05','intake-10-social-support-06','intake-10-social-support-07','intake-10-social-support-08','intake-10-social-support-09','intake-10-social-support-10','intake-10-social-support-11','intake-10-social-support-12',
-                    'intake-11-ace-00','intake-11-ace-01','intake-11-ace-02','intake-11-ace-03','intake-11-ace-04','intake-11-ace-05','intake-11-ace-06','intake-11-ace-07','intake-11-ace-08','intake-11-ace-09','intake-11-ace-10',
-                    'intake-12-ace-exp-00','intake-12-ace-exp-01','intake-12-ace-exp-02','intake-12-ace-exp-03','intake-12-ace-exp-04','intake-12-ace-exp-05','intake-12-ace-exp-06','intake-12-ace-exp-07','intake-12-ace-exp-08','intake-12-ace-exp-09','intake-12-ace-exp-10-mod'];
+                let mentalIntakeSlugs = ['intake-01-adhd-a-01', 'intake-01-adhd-a-02', 'intake-01-adhd-a-03', 'intake-01-adhd-a-04', 'intake-01-adhd-a-05', 'intake-01-adhd-a-06', 'intake-01-adhd-a-07', 'intake-01-adhd-a-08', 'intake-01-adhd-a-09',
+                    'intake-02-adhd-b-10', 'intake-02-adhd-b-11', 'intake-02-adhd-b-12', 'intake-02-adhd-b-13', 'intake-02-adhd-b-14', 'intake-02-adhd-b-15', 'intake-02-adhd-b-16', 'intake-02-adhd-b-17', 'intake-02-adhd-b-18',
+                    'intake-03-anxiety-00', 'intake-03-anxiety-01', 'intake-03-anxiety-02', 'intake-03-anxiety-03', 'intake-03-anxiety-04', 'intake-03-anxiety-05', 'intake-03-anxiety-06', 'intake-03-anxiety-07', 'intake-03-anxiety-08', 'intake-03-anxiety-09',
+                    'intake-04-depression-00', 'intake-04-depression-01', 'intake-04-depression-02', 'intake-04-depression-03', 'intake-04-depression-04', 'intake-04-depression-05', 'intake-04-depression-06', 'intake-04-depression-07', 'intake-04-depression-08', 'intake-04-depression-09', 'intake-04-depression-10-mod',
+                    'intake-05-ptsd-00', 'intake-05-ptsd-01', 'intake-05-ptsd-02', 'intake-05-ptsd-03', 'intake-05-ptsd-04', 'intake-05-ptsd-05', 'intake-05-ptsd-06', 'intake-05-ptsd-07', 'intake-05-ptsd-08', 'intake-05-ptsd-09', 'intake-05-ptsd-10', 'intake-05-ptsd-11', 'intake-05-ptsd-12', 'intake-05-ptsd-13', 'intake-05-ptsd-14', 'intake-05-ptsd-15', 'intake-05-ptsd-16', 'intake-05-ptsd-17', 'intake-05-ptsd-18', 'intake-05-ptsd-19',
+                    'intake-06-sud-00', 'intake-06-sud-01', 'intake-06-sud-02', 'intake-06-sud-03', 'intake-06-sud-04', 'intake-06-sud-05', 'intake-06-sud-06',
+                    'intake-07-fa-00', 'intake-07-fa-01', 'intake-07-fa-02', 'intake-07-fa-03', 'intake-07-fa-04', 'intake-07-fa-05', 'intake-07-fa-06', 'intake-07-fa-07', 'intake-07-fa-08', 'intake-07-fa-09', 'intake-07-fa-10', 'intake-07-fa-11', 'intake-07-fa-12', 'intake-07-fa-13',
+                    'intake-08-ed-00', 'intake-08-ed-01', 'intake-08-ed-02', 'intake-08-ed-03', 'intake-08-ed-04', 'intake-08-ed-05', 'intake-08-ed-06', 'intake-08-ed-07', 'intake-08-ed-08', 'intake-08-ed-09', 'intake-08-ed-10', 'intake-08-ed-10-next', 'intake-08-ed-11', 'intake-08-ed-12', 'intake-08-ed-13-extra',
+                    'intake-09-resilience-00', 'intake-09-resilience-01', 'intake-09-resilience-02', 'intake-09-resilience-03', 'intake-09-resilience-04', 'intake-09-resilience-05', 'intake-09-resilience-06',
+                    'intake-10-social-support-00', 'intake-10-social-support-01', 'intake-10-social-support-02', 'intake-10-social-support-03', 'intake-10-social-support-04', 'intake-10-social-support-05', 'intake-10-social-support-06', 'intake-10-social-support-07', 'intake-10-social-support-08', 'intake-10-social-support-09', 'intake-10-social-support-10', 'intake-10-social-support-11', 'intake-10-social-support-12',
+                    'intake-11-ace-00', 'intake-11-ace-01', 'intake-11-ace-02', 'intake-11-ace-03', 'intake-11-ace-04', 'intake-11-ace-05', 'intake-11-ace-06', 'intake-11-ace-07', 'intake-11-ace-08', 'intake-11-ace-09', 'intake-11-ace-10',
+                    'intake-12-ace-exp-00', 'intake-12-ace-exp-01', 'intake-12-ace-exp-02', 'intake-12-ace-exp-03', 'intake-12-ace-exp-04', 'intake-12-ace-exp-05', 'intake-12-ace-exp-06', 'intake-12-ace-exp-07', 'intake-12-ace-exp-08', 'intake-12-ace-exp-09', 'intake-12-ace-exp-10-mod'];
                 let initialMentalDataQuery = `Select jsonb_agg(jsonb_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id")) as "questionInfoObj"
                     FROM public.answers AS "A"
                     LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
                     WHERE "A"."user_id" = :userId AND "A"."question_slug" in (:commonSlug) AND "A"."uid" = 'cycle-0'
                     GROUP BY "A"."user_id"`;
-                const initialMentalInfoData : any = await this.userModel?.sequelize?.query(initialMentalDataQuery,
+                const initialMentalInfoData: any = await this.userModel?.sequelize?.query(initialMentalDataQuery,
                     { type: QueryTypes.SELECT, raw: true, replacements: { userId: userId, commonSlug: mentalIntakeSlugs } }
                 );
 
-                const resp01 : any = {}
+                const resp01: any = {}
                 initialMentalInfoData[0].questionInfoObj.map((dt: any) => {
                     resp01[dt.quesSlug] = dt.quesData.render && dt.quesData.render.length > 0 ? dt.quesData.render[parseInt(dt.ansValue)] : dt.ansValue
                 })
 
                 finalResp02 = { ...finalResp02, ...resp01 };
 
-                let mentalIntakeReassessSlugs = ['reassess-01-feedback-00','reassess-01-feedback-01-app','reassess-01-feedback-02-food-log','reassess-01-feedback-03-nightly-review','reassess-01-feedback-04-intake','reassess-01-feedback-05-education','reassess-01-feedback-06-videos','reassess-01-feedback-07-assignments','reassess-01-feedback-08-gems','reassess-01-feedback-09-links','reassess-01-feedback-10-recipes','reassess-01-feedback-11-other','reassess-01-feedback-12-science','reassess-01-feedback-13-spirituality','reassess-01-feedback-14-david-wiss','reassess-01-feedback-15-other-feedback','reassess-01-feedback-16-recommendations',
-                    'reassess-02-adherence-01-food-log','reassess-02-adherence-02-food-log','reassess-02-adherence-03-videos','reassess-02-adherence-04-assignments','reassess-02-adherence-05-gems','reassess-02-adherence-06-links','reassess-02-adherence-07-recipes','reassess-02-adherence-08-cooking','reassess-02-adherence-09-meditation','reassess-02-adherence-10-guiding-principles',
-                    'reassess-03-personal-00','reassess-03-personal-08-anthro-weight','reassess-03-personal-11-anthro-weight-freq','reassess-03-personal-12-health-food','reassess-03-personal-13-health-body','reassess-03-personal-14-health-cooking','reassess-03-personal-15-health-meditation','reassess-03-personal-16-health-sleep-hours','reassess-03-personal-17-health-sleep-qual',
-                    'reassess-04-adhd-a','reassess-04-adhd-a-01','reassess-04-adhd-a-02','reassess-04-adhd-a-03','reassess-04-adhd-a-04','reassess-04-adhd-a-05','reassess-04-adhd-a-06','reassess-04-adhd-a-07','reassess-04-adhd-a-08','reassess-04-adhd-a-09',
-                    'reassess-05-adhd-b','reassess-05-adhd-b-10','reassess-05-adhd-b-11','reassess-05-adhd-b-12','reassess-05-adhd-b-13','reassess-05-adhd-b-14','reassess-05-adhd-b-15','reassess-05-adhd-b-16','reassess-05-adhd-b-17','reassess-05-adhd-b-18',
-                    'reassess-06-anxiety-00','reassess-06-anxiety-01','reassess-06-anxiety-02','reassess-06-anxiety-03','reassess-06-anxiety-04','reassess-06-anxiety-05','reassess-06-anxiety-06','reassess-06-anxiety-07','reassess-06-anxiety-08-mod','reassess-06-anxiety-09-extra',
-                    'reassess-07-depression-00','reassess-07-depression-01','reassess-07-depression-02','reassess-07-depression-03','reassess-07-depression-04','reassess-07-depression-05','reassess-07-depression-06','reassess-07-depression-07','reassess-07-depression-08','reassess-07-depression-09','reassess-07-depression-10-mod',
-                    'reassess-08-ptsd-00','reassess-08-ptsd-01','reassess-08-ptsd-02','reassess-08-ptsd-03','reassess-08-ptsd-04','reassess-08-ptsd-05','reassess-08-ptsd-06','reassess-08-ptsd-07','reassess-08-ptsd-08','reassess-08-ptsd-09','reassess-08-ptsd-10','reassess-08-ptsd-11','reassess-08-ptsd-12','reassess-08-ptsd-13','reassess-08-ptsd-14','reassess-08-ptsd-15','reassess-08-ptsd-16','reassess-08-ptsd-17','reassess-08-ptsd-18','reassess-08-ptsd-19','reassess-08-ptsd-20',
-                    'reassess-09-sud-00','reassess-09-sud-01','reassess-09-sud-02','reassess-09-sud-03','reassess-09-sud-04','reassess-09-sud-05-extra','reassess-09-sud-06',
-                    'reassess-10-food-addiction-00','reassess-10-food-addiction-01','reassess-10-food-addiction-02','reassess-10-food-addiction-03','reassess-10-food-addiction-04','reassess-10-food-addiction-05-cs','reassess-10-food-addiction-06-cs','reassess-10-food-addiction-07','reassess-10-food-addiction-08','reassess-10-food-addiction-09','reassess-10-food-addiction-10','reassess-10-food-addiction-11','reassess-10-food-addiction-12','reassess-10-food-addiction-13',
-                    'reassess-11-ed-00','reassess-11-ed-01','reassess-11-ed-02','reassess-11-ed-03','reassess-11-ed-04','reassess-11-ed-05','reassess-11-ed-06','reassess-11-ed-07','reassess-11-ed-08','reassess-11-ed-09','reassess-11-ed-10','reassess-11-ed-10-next','reassess-11-ed-11','reassess-11-ed-12','reassess-11-ed-13-extra',
-                    'reassess-12-resilience-00','reassess-12-resilience-01','reassess-12-resilience-02','reassess-12-resilience-03','reassess-12-resilience-04','reassess-12-resilience-05','reassess-12-resilience-06',
-                    'reassess-13-social-support-00','reassess-13-social-support-01','reassess-13-social-support-02','reassess-13-social-support-03','reassess-13-social-support-04','reassess-13-social-support-05','reassess-13-social-support-06','reassess-13-social-support-07','reassess-13-social-support-08','reassess-13-social-support-09','reassess-13-social-support-10','reassess-13-social-support-11','reassess-13-social-support-12'];
-                
+                let mentalIntakeReassessSlugs = ['reassess-01-feedback-00', 'reassess-01-feedback-01-app', 'reassess-01-feedback-02-food-log', 'reassess-01-feedback-03-nightly-review', 'reassess-01-feedback-04-intake', 'reassess-01-feedback-05-education', 'reassess-01-feedback-06-videos', 'reassess-01-feedback-07-assignments', 'reassess-01-feedback-08-gems', 'reassess-01-feedback-09-links', 'reassess-01-feedback-10-recipes', 'reassess-01-feedback-11-other', 'reassess-01-feedback-12-science', 'reassess-01-feedback-13-spirituality', 'reassess-01-feedback-14-david-wiss', 'reassess-01-feedback-15-other-feedback', 'reassess-01-feedback-16-recommendations',
+                    'reassess-02-adherence-01-food-log', 'reassess-02-adherence-02-food-log', 'reassess-02-adherence-03-videos', 'reassess-02-adherence-04-assignments', 'reassess-02-adherence-05-gems', 'reassess-02-adherence-06-links', 'reassess-02-adherence-07-recipes', 'reassess-02-adherence-08-cooking', 'reassess-02-adherence-09-meditation', 'reassess-02-adherence-10-guiding-principles',
+                    'reassess-03-personal-00', 'reassess-03-personal-08-anthro-weight', 'reassess-03-personal-11-anthro-weight-freq', 'reassess-03-personal-12-health-food', 'reassess-03-personal-13-health-body', 'reassess-03-personal-14-health-cooking', 'reassess-03-personal-15-health-meditation', 'reassess-03-personal-16-health-sleep-hours', 'reassess-03-personal-17-health-sleep-qual',
+                    'reassess-04-adhd-a', 'reassess-04-adhd-a-01', 'reassess-04-adhd-a-02', 'reassess-04-adhd-a-03', 'reassess-04-adhd-a-04', 'reassess-04-adhd-a-05', 'reassess-04-adhd-a-06', 'reassess-04-adhd-a-07', 'reassess-04-adhd-a-08', 'reassess-04-adhd-a-09',
+                    'reassess-05-adhd-b', 'reassess-05-adhd-b-10', 'reassess-05-adhd-b-11', 'reassess-05-adhd-b-12', 'reassess-05-adhd-b-13', 'reassess-05-adhd-b-14', 'reassess-05-adhd-b-15', 'reassess-05-adhd-b-16', 'reassess-05-adhd-b-17', 'reassess-05-adhd-b-18',
+                    'reassess-06-anxiety-00', 'reassess-06-anxiety-01', 'reassess-06-anxiety-02', 'reassess-06-anxiety-03', 'reassess-06-anxiety-04', 'reassess-06-anxiety-05', 'reassess-06-anxiety-06', 'reassess-06-anxiety-07', 'reassess-06-anxiety-08-mod', 'reassess-06-anxiety-09-extra',
+                    'reassess-07-depression-00', 'reassess-07-depression-01', 'reassess-07-depression-02', 'reassess-07-depression-03', 'reassess-07-depression-04', 'reassess-07-depression-05', 'reassess-07-depression-06', 'reassess-07-depression-07', 'reassess-07-depression-08', 'reassess-07-depression-09', 'reassess-07-depression-10-mod',
+                    'reassess-08-ptsd-00', 'reassess-08-ptsd-01', 'reassess-08-ptsd-02', 'reassess-08-ptsd-03', 'reassess-08-ptsd-04', 'reassess-08-ptsd-05', 'reassess-08-ptsd-06', 'reassess-08-ptsd-07', 'reassess-08-ptsd-08', 'reassess-08-ptsd-09', 'reassess-08-ptsd-10', 'reassess-08-ptsd-11', 'reassess-08-ptsd-12', 'reassess-08-ptsd-13', 'reassess-08-ptsd-14', 'reassess-08-ptsd-15', 'reassess-08-ptsd-16', 'reassess-08-ptsd-17', 'reassess-08-ptsd-18', 'reassess-08-ptsd-19', 'reassess-08-ptsd-20',
+                    'reassess-09-sud-00', 'reassess-09-sud-01', 'reassess-09-sud-02', 'reassess-09-sud-03', 'reassess-09-sud-04', 'reassess-09-sud-05-extra', 'reassess-09-sud-06',
+                    'reassess-10-food-addiction-00', 'reassess-10-food-addiction-01', 'reassess-10-food-addiction-02', 'reassess-10-food-addiction-03', 'reassess-10-food-addiction-04', 'reassess-10-food-addiction-05-cs', 'reassess-10-food-addiction-06-cs', 'reassess-10-food-addiction-07', 'reassess-10-food-addiction-08', 'reassess-10-food-addiction-09', 'reassess-10-food-addiction-10', 'reassess-10-food-addiction-11', 'reassess-10-food-addiction-12', 'reassess-10-food-addiction-13',
+                    'reassess-11-ed-00', 'reassess-11-ed-01', 'reassess-11-ed-02', 'reassess-11-ed-03', 'reassess-11-ed-04', 'reassess-11-ed-05', 'reassess-11-ed-06', 'reassess-11-ed-07', 'reassess-11-ed-08', 'reassess-11-ed-09', 'reassess-11-ed-10', 'reassess-11-ed-10-next', 'reassess-11-ed-11', 'reassess-11-ed-12', 'reassess-11-ed-13-extra',
+                    'reassess-12-resilience-00', 'reassess-12-resilience-01', 'reassess-12-resilience-02', 'reassess-12-resilience-03', 'reassess-12-resilience-04', 'reassess-12-resilience-05', 'reassess-12-resilience-06',
+                    'reassess-13-social-support-00', 'reassess-13-social-support-01', 'reassess-13-social-support-02', 'reassess-13-social-support-03', 'reassess-13-social-support-04', 'reassess-13-social-support-05', 'reassess-13-social-support-06', 'reassess-13-social-support-07', 'reassess-13-social-support-08', 'reassess-13-social-support-09', 'reassess-13-social-support-10', 'reassess-13-social-support-11', 'reassess-13-social-support-12'];
+
                 let reassessMentalDataQuery = `Select jsonb_agg(jsonb_build_object('quesContent', "Q"."content", 'quesData', "Q"."data", 'quesSlug', "A"."question_slug", 'ansValue', "A"."values", 'uid', "A"."uid", 'userId', "A"."user_id")) as "questionInfoObj"
                     FROM public.answers AS "A"
                     LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
                     WHERE "A"."user_id" = :userId AND "A"."question_slug" in (:commonSlug) AND "A"."uid" = :uid
                     GROUP BY "A"."user_id"`;
-                    for (let i = 1; i < 3; i++) {
-                        const reassessMentalInfoData : any = await this.userModel?.sequelize?.query(reassessMentalDataQuery,
-                            { type: QueryTypes.SELECT, raw: true, replacements: { userId: userId, uid: 'cycle-'+i, commonSlug: mentalIntakeReassessSlugs } }
-                        );
-                        const resp02 : any = {};
-                        if (reassessMentalInfoData.length > 0) {
-                            reassessMentalInfoData[0].questionInfoObj.map((dt: any) => {
-                                resp02[dt.quesSlug+'-cycle-'+i] = dt.quesData.render && dt.quesData.render.length > 0 ? dt.quesData.render[parseInt(dt.ansValue)] : dt.ansValue
-                            })
-                        }
+                for (let i = 1; i < 3; i++) {
+                    const reassessMentalInfoData: any = await this.userModel?.sequelize?.query(reassessMentalDataQuery,
+                        { type: QueryTypes.SELECT, raw: true, replacements: { userId: userId, uid: 'cycle-' + i, commonSlug: mentalIntakeReassessSlugs } }
+                    );
+                    const resp02: any = {};
+                    if (reassessMentalInfoData.length > 0) {
+                        reassessMentalInfoData[0].questionInfoObj.map((dt: any) => {
+                            resp02[dt.quesSlug + '-cycle-' + i] = dt.quesData.render && dt.quesData.render.length > 0 ? dt.quesData.render[parseInt(dt.ansValue)] : dt.ansValue
+                        })
+                    }
 
-                        finalResp02 = { ...finalResp02, ...resp02 };
+                    finalResp02 = { ...finalResp02, ...resp02 };
                 }
 
                 finalResponse.push(finalResp02);

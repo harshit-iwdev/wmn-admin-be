@@ -2804,24 +2804,24 @@ export class UsersService {
                         { type: QueryTypes.SELECT, raw: true, replacements: { userId: userId, commonSlug: commonSlugReassess, uid: `cycle-${ind}` } }
                     );
                     if (ind === 1) {
-                        finalResp02.Weight_Post1 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-08-anthro-weight', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-08-anthro-weight')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Weigh_Often_Post1 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-11-anthro-weight-freq', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-11-anthro-weight-freq')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Perc_Day_Food_Post1 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-12-health-food', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-12-health-food')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Perc_Day_Body_Post1 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-13-health-body', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-13-health-body')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Comf_Cook_Post1 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-14-health-cooking', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-14-health-cooking')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Comf_Med_Post1 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-15-health-meditation', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-15-health-meditation')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Hrs_Sleep_Post1 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-16-health-sleep-hours', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-16-health-sleep-hours')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Sleep_Qual_Post1 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-17-health-sleep-qual', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-17-health-sleep-qual')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Weight_Post1 = reassessInfoData.length > 0 && reassessInfoData[0]?.questionInfoObj ? getQuestionInfoValue('reassess-03-personal-08-anthro-weight', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-08-anthro-weight')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Weigh_Often_Post1 = reassessInfoData.length > 0 && reassessInfoData[0]?.questionInfoObj ? getQuestionInfoValue('reassess-03-personal-11-anthro-weight-freq', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-11-anthro-weight-freq')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Perc_Day_Food_Post1 = reassessInfoData.length > 0 && reassessInfoData[0]?.questionInfoObj ? getQuestionInfoValue('reassess-03-personal-12-health-food', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-12-health-food')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Perc_Day_Body_Post1 = reassessInfoData.length > 0 && reassessInfoData[0]?.questionInfoObj ? getQuestionInfoValue('reassess-03-personal-13-health-body', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-13-health-body')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Comf_Cook_Post1 = reassessInfoData.length > 0 && reassessInfoData[0]?.questionInfoObj ? getQuestionInfoValue('reassess-03-personal-14-health-cooking', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-14-health-cooking')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Comf_Med_Post1 = reassessInfoData.length > 0 && reassessInfoData[0]?.questionInfoObj ? getQuestionInfoValue('reassess-03-personal-15-health-meditation', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-15-health-meditation')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Hrs_Sleep_Post1 = reassessInfoData.length > 0 && reassessInfoData[0]?.questionInfoObj ? getQuestionInfoValue('reassess-03-personal-16-health-sleep-hours', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-16-health-sleep-hours')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Sleep_Qual_Post1 = reassessInfoData.length > 0 && reassessInfoData[0]?.questionInfoObj ? getQuestionInfoValue('reassess-03-personal-17-health-sleep-qual', reassessInfoData[0].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-17-health-sleep-qual')?.ansValue, reassessInfoData) : '';
                     }
                     if (ind === 2) {
-                        finalResp02.Weight_Post2 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-08-anthro-weight', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-08-anthro-weight')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Weigh_Often_Post2 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-11-anthro-weight-freq', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-11-anthro-weight-freq')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Perc_Day_Food_Post2 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-12-health-food', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-12-health-food')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Perc_Day_Body_Post2 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-13-health-body', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-13-health-body')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Comf_Cook_Post2 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-14-health-cooking', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-14-health-cooking')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Comf_Med_Post2 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-15-health-meditation', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-15-health-meditation')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Hrs_Sleep_Post2 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-16-health-sleep-hours', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-16-health-sleep-hours')?.ansValue, reassessInfoData) : '';
-                        finalResp02.Sleep_Qual_Post2 = reassessInfoData.length > 0 ? getQuestionInfoValue('reassess-03-personal-17-health-sleep-qual', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-17-health-sleep-qual')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Weight_Post2 = reassessInfoData.length > 0 && reassessInfoData[1]?.questionInfoObj ? getQuestionInfoValue('reassess-03-personal-08-anthro-weight', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-08-anthro-weight')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Weigh_Often_Post2 = reassessInfoData.length > 0 && reassessInfoData[1]?.questionInfoObj ? getQuestionInfoValue('reassess-03-personal-11-anthro-weight-freq', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-11-anthro-weight-freq')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Perc_Day_Food_Post2 = reassessInfoData.length > 0 && reassessInfoData[1]?.questionInfoObj ? getQuestionInfoValue('reassess-03-personal-12-health-food', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-12-health-food')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Perc_Day_Body_Post2 = reassessInfoData.length > 0 && reassessInfoData[1]?.questionInfoObj ? getQuestionInfoValue('reassess-03-personal-13-health-body', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-13-health-body')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Comf_Cook_Post2 = reassessInfoData.length > 0 && reassessInfoData[1]?.questionInfoObj ? getQuestionInfoValue('reassess-03-personal-14-health-cooking', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-14-health-cooking')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Comf_Med_Post2 = reassessInfoData.length > 0 && reassessInfoData[1]?.questionInfoObj ? getQuestionInfoValue('reassess-03-personal-15-health-meditation', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-15-health-meditation')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Hrs_Sleep_Post2 = reassessInfoData.length > 0 && reassessInfoData[1]?.questionInfoObj ? getQuestionInfoValue('reassess-03-personal-16-health-sleep-hours', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-16-health-sleep-hours')?.ansValue, reassessInfoData) : '';
+                        finalResp02.Sleep_Qual_Post2 = reassessInfoData.length > 0 && reassessInfoData[1]?.questionInfoObj ? getQuestionInfoValue('reassess-03-personal-17-health-sleep-qual', reassessInfoData[1].questionInfoObj.find((item: any) => item.quesSlug === 'reassess-03-personal-17-health-sleep-qual')?.ansValue, reassessInfoData) : '';
                     }
                 }
 
@@ -2859,9 +2859,11 @@ export class UsersService {
                 );
 
                 const resp01: any = {}
-                initialMentalInfoData[0].questionInfoObj.map((dt: any) => {
-                    resp01[dt.quesSlug] = dt.quesData.render && dt.quesData.render.length > 0 ? dt.quesData.render[parseInt(dt.ansValue)] : dt.ansValue
-                })
+                if (initialMentalInfoData.length > 0) {
+                    initialMentalInfoData[0]?.questionInfoObj?.map((dt: any) => {
+                        resp01[dt.quesSlug] = dt.quesData.render && dt.quesData.render.length > 0 ? dt.quesData.render[parseInt(dt.ansValue)] : dt.ansValue
+                    })
+                }
 
                 finalResp02 = { ...finalResp02, ...resp01 };
 
@@ -2890,7 +2892,7 @@ export class UsersService {
                     );
                     const resp02: any = {};
                     if (reassessMentalInfoData.length > 0) {
-                        reassessMentalInfoData[0].questionInfoObj.map((dt: any) => {
+                        reassessMentalInfoData[0]?.questionInfoObj?.map((dt: any) => {
                             resp02[dt.quesSlug + '-cycle-' + i] = dt.quesData.render && dt.quesData.render.length > 0 ? dt.quesData.render[parseInt(dt.ansValue)] : dt.ansValue
                         })
                     }

@@ -55,7 +55,7 @@ export class PractitionerService {
 
             // Sorting
             const allowedUserCols = ['last_seen', 'email', 'created_at'];
-            const allowedMetaCols = ['first_name', 'last_name', 'username', 'cycle', 'pro_day', 'plan', 'renewalNumber', 'revCatTrial'];
+            const allowedMetaCols = ['first_name', 'last_name', 'username', 'cycle', 'pro_day', 'plan', 'renewalNumber', 'revCatTrial', 'revCatStatus'];
 
             if (sortBy && sortOrder) {
                 if (allowedUserCols.includes(sortBy)) {

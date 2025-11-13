@@ -5,6 +5,7 @@ import { QueryTypes } from 'sequelize';
 import { FilterDto, FoodLogsFilterDto, IResponse } from './dto/filter.dto';
 import { Resend } from 'resend';
 import * as XLSX from 'xlsx';
+import axios from 'axios';
 
 @Injectable()
 export class UsersService {
@@ -77,7 +78,7 @@ export class UsersService {
             // --- Sorting ---
             if (sortBy && sortOrder) {
                 const allowedUserCols = ['last_seen', 'email'];
-                const allowedMetaCols = ['first_name', 'last_name', 'username', 'cycle', 'pro_day', 'plan', 'renewalNumber', 'revCatTrial'];
+                const allowedMetaCols = ['first_name', 'last_name', 'username', 'cycle', 'pro_day', 'plan', 'renewalNumber', 'revCatTrial', 'revCatStatus'];
                 if (allowedUserCols.includes(sortBy)) {
                     executeDataQuery += ` ORDER BY U.${sortBy} ${sortOrder.toUpperCase()} `;
                 } else if (allowedMetaCols.includes(sortBy)) {
@@ -91,7 +92,7 @@ export class UsersService {
             executeDataQuery += ` LIMIT :pageSize OFFSET :offset `;
 
             // --- Run Queries ---
-            const users = await this.userModel?.sequelize?.query(executeDataQuery, {
+            const users: any = await this.userModel?.sequelize?.query(executeDataQuery, {
                 type: QueryTypes.SELECT,
                 raw: true,
                 replacements: filterOpts,
@@ -102,6 +103,37 @@ export class UsersService {
                 raw: true,
                 replacements: filterOpts,
             });
+
+            if (users && users.length>0) {
+                for (let i = 0; i < users.length; i++) {
+                    let userId = users[i].user.id;
+
+                    try {
+                        const revCatData = await axios.get(`${process.env.REV_CAT_BASE_URL}/v2/projects/${process.env.REV_CAT_PROJECT_KEY}/customers/${userId}/subscriptions`, {
+                            headers: {
+                                'Authorization': `Bearer ${process.env.REV_CAT_KEY_V2}`,
+                                'Content-Type': 'application/json',
+                            },
+                        });
+
+                        if (revCatData.data.items && revCatData.data.items.length > 0) {
+                            let metadataCreateQuery = `UPDATE public.metadata set "revCatStatus" = :revCatStatus where "user_id" = :userId`;
+                            const metadataCreate: any = await this.userModel?.sequelize?.query(metadataCreateQuery, {
+                                type: QueryTypes.INSERT,
+                                raw: true,
+                                replacements: {
+                                    userId: userId,
+                                    revCatStatus: revCatData.data.items[0].status
+                                }
+                            });
+                        }
+                    } catch (error: any) {
+                        console.error(`Error fetching RevCat data for user ${userId}:`, error.message || error);
+                        // Continue to next iteration
+                        continue;
+                    }
+                }
+            }
 
             return {
                 success: true,

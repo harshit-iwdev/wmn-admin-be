@@ -6,6 +6,7 @@ import { FilterDto, FoodLogsFilterDto, IResponse } from './dto/filter.dto';
 import { Resend } from 'resend';
 import * as XLSX from 'xlsx';
 import axios from 'axios';
+import OpenAI from 'openai';
 
 @Injectable()
 export class UsersService {
@@ -747,11 +748,10 @@ export class UsersService {
         }
     }
 
-    async fetchUserFoodLogJournal(id: string, pageNumber: number, pageSize: number): Promise<any> {
+    async fetchUserFoodLogJournal(id: string, pageNumber: number | null, pageSize: number | null): Promise<any> {
         try {
-            const offset = (pageNumber - 1) * pageSize;
 
-            const executeFoodLogJournalQuery = `SELECT jsonb_build_object('id', R.id, 'user_id', R."user_id", 'review_date', R."review_date",
+            let executeFoodLogJournalQuery = `SELECT jsonb_build_object('id', R.id, 'user_id', R."user_id", 'review_date', R."review_date",
                 'whatWentWell', R."whatWentWell", 'whatCouldBeBetter', R."whatCouldBeBetter",
                 'correctiveMeasures', R."correctiveMeasures", 'thoughts', R."thoughts", 'created_at', R."created_at",
                 'foodLogs', COALESCE(jsonb_agg(to_jsonb(FL) ORDER BY FL."created_at" DESC) FILTER (WHERE FL.id IS NOT NULL), '[]'::jsonb),
@@ -761,13 +761,18 @@ export class UsersService {
                 WHERE R."user_id" = :id
                 GROUP BY R.id, R."user_id", R."whatWentWell", R."whatCouldBeBetter", 
                 R."correctiveMeasures", R."thoughts", R."created_at"
-                ORDER BY Date(R."review_date") DESC LIMIT :pageSize OFFSET :offset`;
+                ORDER BY Date(R."review_date") DESC`;
+
+                if (pageNumber && pageSize) {
+                    const offset = (pageNumber - 1) * pageSize;
+                    executeFoodLogJournalQuery += ` LIMIT ${pageSize} OFFSET ${offset}`;
+                }
             let foodLogJournal: any = await this.userModel?.sequelize?.query(
                 executeFoodLogJournalQuery,
                 {
                     type: QueryTypes.SELECT,
                     raw: true,
-                    replacements: { id: id, pageSize: pageSize, offset: offset },
+                    replacements: { id: id },
                 }
             );
 
@@ -2936,6 +2941,440 @@ export class UsersService {
             }
 
             return { success: true, data: finalResponse, message: 'Admin CSV data fetched successfully' };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
+    async generateUserSummary(userId: string): Promise<any> {
+        try {
+
+            let userDataResponse = await this.fetchUserDetailsById(userId);
+            let foodLogsDataResponse = await this.fetchUserFoodLogs({ id: userId, startDate: '', endDate: '' });
+            let reviewsDataResponse = await this.fetchUserFoodLogJournal(userId, null, null);
+            let workbookDataResponse = await this.fetchUserWorkbook(userId);
+
+            // Extract data from responses
+            const userData = userDataResponse.data;
+            const foodLogsData = foodLogsDataResponse.data;
+            const reviewsData = reviewsDataResponse.data;
+            const workbookData = workbookDataResponse.data;
+
+            // Get user creation date for days in program calculation
+            const userCreatedAt = userData?.user?.created_at ? new Date(userData.user.created_at) : new Date();
+            const daysInProgram = Math.floor((new Date().getTime() - userCreatedAt.getTime()) / (1000 * 60 * 60 * 24));
+
+            // Module Progress
+            const currentModule = workbookData?.module || userData?.metadata?.pro_day || 0;
+            const currentCycle = workbookData?.cycle || userData?.metadata?.cycle || 0;
+
+            // Food Logging Patterns
+            const consecutiveLogs = foodLogsData?.consecutiveLogs || 0;
+            const avgFoodLogsPerDay = parseFloat(foodLogsData?.avgFoodLogCountPerDay) || 0;
+            const totalReviewCount = foodLogsData?.totalReviewCount || 0;
+
+            // Average Food Group Frequency
+            const avgFoodGroups = foodLogsData?.averageFoodLogsPerDay || {};
+            const fruitFreq = parseFloat(avgFoodGroups['Fruit (F)'] || avgFoodGroups['fruit'] || 0);
+            const vegetableFreq = parseFloat(avgFoodGroups['Vegetable (V)'] || avgFoodGroups['vegetable'] || 0);
+            const grainFreq = parseFloat(avgFoodGroups['Grain (G)'] || avgFoodGroups['grain'] || 0);
+            const dairyFreq = parseFloat(avgFoodGroups['Dairy (D)'] || avgFoodGroups['dairy'] || 0);
+            const proteinFreq = parseFloat(avgFoodGroups['Protein (P)'] || avgFoodGroups['protein'] || 0);
+            const bnsFreq = parseFloat(avgFoodGroups['Beans/Nuts/Seeds (bns)'] || avgFoodGroups['Beans/Nuts/Seeds (BNS)'] || avgFoodGroups['beansNutsSeeds'] || 0);
+
+            // New Foods Introduced (from AI recognition - past week)
+            const aiFoodGroups = foodLogsData?.aiConfirmedFoodGroups || {};
+            const newFoods: string[] = [];
+            Object.values(aiFoodGroups).forEach((group: any) => {
+                if (group?.description && Array.isArray(group.description)) {
+                    newFoods.push(...group.description.filter((f: string) => f && f.trim()));
+                }
+            });
+            const uniqueNewFoods = Array.from(new Set(newFoods)).slice(0, 10); // Limit to 10 most recent
+
+            // Hunger/Fullness Patterns - Query food logs for hunger/fullness data
+            let hungerFullnessData = {
+                lowHungerCount: 0,
+                highFullnessCount: 0,
+                avgPreMealHunger: 0,
+                avgPostMealFullness: 0,
+                totalMeals: 0
+            };
+
+            try {
+                // const hungerFullnessQuery = `SELECT 
+                //     COUNT(*) FILTER (WHERE "pre_meal_hunger" <= 2) as "low_hunger_count",
+                //     COUNT(*) FILTER (WHERE "post_meal_fullness" >= 7) as "high_fullness_count",
+                //     AVG("pre_meal_hunger") as "avg_pre_hunger",
+                //     AVG("post_meal_fullness") as "avg_post_fullness",
+                //     COUNT(*) as "total_meals"
+                //     FROM public.food_logs 
+                //     WHERE "userId" = :userId 
+                //     AND "pre_meal_hunger" IS NOT NULL 
+                //     AND "post_meal_fullness" IS NOT NULL`;
+                
+                // const hungerFullnessResult: any = await this.userModel?.sequelize?.query(
+                //     hungerFullnessQuery,
+                //     {
+                //         type: QueryTypes.SELECT,
+                //         raw: true,
+                //         replacements: { userId: userId },
+                //     }
+                // );
+
+                // if (hungerFullnessResult && hungerFullnessResult[0]) {
+                //     hungerFullnessData = {
+                //         lowHungerCount: parseInt(hungerFullnessResult[0].low_hunger_count) || 0,
+                //         highFullnessCount: parseInt(hungerFullnessResult[0].high_fullness_count) || 0,
+                //         avgPreMealHunger: parseFloat(hungerFullnessResult[0].avg_pre_hunger) || 0,
+                //         avgPostMealFullness: parseFloat(hungerFullnessResult[0].avg_post_fullness) || 0,
+                //         totalMeals: parseInt(hungerFullnessResult[0].total_meals) || 0
+                //     };
+                // }
+            } catch (err) {
+                // If hunger/fullness columns don't exist, continue without them
+                console.log('Hunger/fullness data not available:', err);
+            }
+
+            // Intentions
+            const currentIntentions = reviewsData?.intentions || [];
+            const activeIntentions = currentIntentions.filter((int: any) => int && !int.completed).map((int: any) => int.text || int).slice(0, 3);
+
+            // Analyze Nightly Review Themes
+            const reviews = reviewsData?.reviews || [];
+            const reviewThemes = {
+                emotionalPatterns: [] as string[],
+                recurringChallenges: [] as string[],
+                breakthroughMoments: [] as string[],
+                insights: [] as string[]
+            };
+
+            reviews.forEach((review: any) => {
+                const reviewObj = typeof review === 'object' && review.review ? review.review : review;
+                const whatWentWell = reviewObj?.whatWentWell || '';
+                const whatCouldBeBetter = reviewObj?.whatCouldBeBetter || '';
+                const correctiveMeasures = reviewObj?.correctiveMeasures || '';
+                const thoughts = reviewObj?.thoughts || '';
+
+                // Extract emotional patterns (keywords: stress, anxious, worried, emotional, feeling)
+                const emotionalKeywords = ['stress', 'anxious', 'worried', 'emotional', 'feeling', 'upset', 'frustrated', 'overwhelmed'];
+                const allText = `${whatWentWell} ${whatCouldBeBetter} ${thoughts}`.toLowerCase();
+                if (emotionalKeywords.some(keyword => allText.includes(keyword))) {
+                    const snippet = thoughts || whatCouldBeBetter || whatWentWell;
+                    if (snippet && snippet.length > 10 && reviewThemes.emotionalPatterns.length < 3) {
+                        reviewThemes.emotionalPatterns.push(snippet.substring(0, 100));
+                    }
+                }
+
+                // Extract breakthrough moments (positive language in whatWentWell)
+                if (whatWentWell && whatWentWell.length > 20) {
+                    const positiveKeywords = ['celebrat', 'success', 'proud', 'breakthrough', 'improved', 'better', 'tried', 'new'];
+                    if (positiveKeywords.some(keyword => whatWentWell.toLowerCase().includes(keyword))) {
+                        if (reviewThemes.breakthroughMoments.length < 3) {
+                            reviewThemes.breakthroughMoments.push(whatWentWell.substring(0, 100));
+                        }
+                    }
+                }
+
+                // Extract recurring challenges (patterns in whatCouldBeBetter)
+                if (whatCouldBeBetter && whatCouldBeBetter.length > 20) {
+                    if (reviewThemes.recurringChallenges.length < 3) {
+                        reviewThemes.recurringChallenges.push(whatCouldBeBetter.substring(0, 100));
+                    }
+                }
+
+                // Extract insights (from thoughts)
+                if (thoughts && thoughts.length > 30) {
+                    if (reviewThemes.insights.length < 3) {
+                        reviewThemes.insights.push(thoughts.substring(0, 150));
+                    }
+                }
+            });
+
+            // Workbook Assignments
+            const pinnedGems = workbookData?.pinnedGems || [];
+            const gemsCount = Array.isArray(pinnedGems) ? pinnedGems.length : (pinnedGems?.gems?.length || 0);
+            const assignmentQuestions = workbookData?.assignmentQuestionsData || [];
+            const completedAssignments = assignmentQuestions.filter((aq: any) => 
+                aq.questions && aq.questions.some((q: any) => q.answer_id && q.values)
+            ).length;
+
+            // Generate Clinical Summary using OpenAI
+            const currentDate = new Date();
+            const generatedDate = currentDate.toISOString().split('T')[0] + ' ' + 
+                currentDate.toTimeString().split(' ')[0].substring(0, 5);
+
+            // Calculate period (last 30 days or since program start)
+            const periodStart = new Date(currentDate);
+            periodStart.setDate(periodStart.getDate() - 30);
+            const periodStartStr = periodStart.toISOString().split('T')[0];
+            const periodEndStr = currentDate.toISOString().split('T')[0];
+
+            // Prepare data summary for OpenAI
+            const dataSummary = {
+                programEngagement: {
+                    currentModule: currentModule,
+                    moduleName: workbookData?.moduleName || '',
+                    daysInProgram: daysInProgram,
+                    currentCycle: currentCycle
+                },
+                eatingPatterns: {
+                    avgFoodLogsPerDay: avgFoodLogsPerDay.toFixed(1),
+                    consecutiveLogsWithAllGroups: consecutiveLogs,
+                    totalReviews: totalReviewCount
+                },
+                foodGroupFrequency: {
+                    fruit: fruitFreq.toFixed(1),
+                    vegetable: vegetableFreq.toFixed(1),
+                    grain: grainFreq.toFixed(1),
+                    dairy: dairyFreq.toFixed(1),
+                    protein: proteinFreq.toFixed(1),
+                    beansNutsSeeds: bnsFreq.toFixed(1)
+                },
+                newFoods: uniqueNewFoods.slice(0, 10),
+                hungerFullness: hungerFullnessData,
+                intentions: activeIntentions,
+                reviewThemes: {
+                    emotionalPatterns: reviewThemes.emotionalPatterns,
+                    recurringChallenges: reviewThemes.recurringChallenges,
+                    breakthroughMoments: reviewThemes.breakthroughMoments,
+                    insights: reviewThemes.insights
+                },
+                workbookProgress: {
+                    gemsPinned: gemsCount,
+                    assignmentsCompleted: completedAssignments
+                }
+            };
+
+            // Prepare sample reviews for context (last 5 reviews)
+            const sampleReviews = reviews.slice(0, 5).map((review: any) => {
+                const reviewObj = typeof review === 'object' && review.review ? review.review : review;
+                return {
+                    date: reviewObj?.review_date || '',
+                    whatWentWell: reviewObj?.whatWentWell || '',
+                    whatCouldBeBetter: reviewObj?.whatCouldBeBetter || '',
+                    correctiveMeasures: reviewObj?.correctiveMeasures || '',
+                    thoughts: reviewObj?.thoughts || ''
+                };
+            });
+
+            // Initialize OpenAI client
+            const openai = new OpenAI({
+                apiKey: process.env.OPENAI_API_KEY,
+            });
+
+            // Create comprehensive prompt
+            const prompt = `You are a clinical nutritionist generating a professional clinical summary for functional medicine or therapy notes.
+
+REQUIREMENTS:
+1. Use clinical but accessible language
+2. Be concise - aim for 1 page maximum
+3. Focus on patterns, not individual meals
+4. Highlight clinically relevant changes
+5. Avoid diagnosis or medical advice
+6. Present observations objectively
+7. Flag concerning patterns without alarm
+
+ANALYSIS PRIORITIES:
+1. Eating behavior patterns (timing, frequency, context)
+2. Hunger/satiety dysregulation
+3. Food variety and restriction patterns
+4. Emotional eating indicators
+5. Progress toward therapeutic goals
+
+CLIENT DATA:
+Program Engagement:
+- Current Module: ${dataSummary.programEngagement.currentModule}${dataSummary.programEngagement.moduleName ? ' - ' + dataSummary.programEngagement.moduleName : ''}
+- Days in Program: ${dataSummary.programEngagement.daysInProgram}
+- Current Cycle: ${dataSummary.programEngagement.currentCycle}
+
+Food Logging Patterns:
+- Average food logs per day: ${dataSummary.eatingPatterns.avgFoodLogsPerDay}
+- Consecutive reviews with all food groups: ${dataSummary.eatingPatterns.consecutiveLogsWithAllGroups}
+- Total reviews: ${dataSummary.eatingPatterns.totalReviews}
+
+Average Food Group Frequency (daily averages):
+- Fruits (F): ${dataSummary.foodGroupFrequency.fruit} times/day
+- Vegetables (V): ${dataSummary.foodGroupFrequency.vegetable} times/day
+- Grains (G): ${dataSummary.foodGroupFrequency.grain} times/day
+- Dairy/Alternatives (D): ${dataSummary.foodGroupFrequency.dairy} times/day
+- Protein/Alternatives (P): ${dataSummary.foodGroupFrequency.protein} times/day
+- Beans/nuts/seeds (BNS): ${dataSummary.foodGroupFrequency.beansNutsSeeds} times/day
+
+New Foods Introduced: ${dataSummary.newFoods.length > 0 ? dataSummary.newFoods.join(', ') : 'None recorded'}
+
+Hunger/Fullness Patterns:
+${dataSummary.hungerFullness.totalMeals > 0 ? `
+- Count of meals with hunger ≤2 (not hungry enough): ${dataSummary.hungerFullness.lowHungerCount}
+- Count of meals with fullness ≥7 (overly full): ${dataSummary.hungerFullness.highFullnessCount}
+- Average pre-meal hunger: ${dataSummary.hungerFullness.avgPreMealHunger.toFixed(1)}/10
+- Average post-meal fullness: ${dataSummary.hungerFullness.avgPostMealFullness.toFixed(1)}/10
+` : '- Data not available'}
+
+Current Intentions: ${dataSummary.intentions.length > 0 ? dataSummary.intentions.join('; ') : 'None'}
+
+Nightly Review Themes (from recent reviews):
+${dataSummary.reviewThemes.emotionalPatterns.length > 0 ? `- Emotional patterns: ${dataSummary.reviewThemes.emotionalPatterns.join('; ')}\n` : ''}
+${dataSummary.reviewThemes.recurringChallenges.length > 0 ? `- Recurring challenges: ${dataSummary.reviewThemes.recurringChallenges.join('; ')}\n` : ''}
+${dataSummary.reviewThemes.breakthroughMoments.length > 0 ? `- Breakthrough moments: ${dataSummary.reviewThemes.breakthroughMoments.join('; ')}\n` : ''}
+
+Workbook Assignments:
+- Gems saved/pinned: ${dataSummary.workbookProgress.gemsPinned}
+- Assignments completed: ${dataSummary.workbookProgress.assignmentsCompleted}
+
+Sample Recent Reviews:
+${JSON.stringify(sampleReviews, null, 2)}
+
+Generate a clinical summary in the following format (match this structure exactly):
+
+CLINICAL NUTRITION SUMMARY
+Generated: ${generatedDate}
+Period: ${periodStartStr} to ${periodEndStr}
+Type: Full Summary
+
+Program Engagement
+- Current Module: [module number] - [module name if available]
+- Days in Program: [days]
+
+Eating Pattern Analysis
+[Analyze meal timing, frequency, and food group distribution. Be specific about patterns observed.]
+
+Food Group Distribution shows [describe adequacy/limitations of each group with specific numbers].
+
+New foods introduced: [list if any]
+Food variety trajectory: [Expanding/Developing/Stable]
+
+Hunger-Satiety Regulation
+- Episodes of overfullness: [count] times ([context if available])
+- Client showing [observation about hunger/fullness awareness]
+
+Therapeutic Insights
+Most recent intention: "[intention text]"
+
+Nightly Review Themes:
+- [Theme 1 with specific example]
+- [Theme 2 with specific example]
+- [Theme 3 with specific example]
+
+Clinical Impressions
+[2-3 sentences summarizing key observations about client progress, patterns, and areas needing attention. Be objective and clinical.]
+
+Recommendations for Clinical Team
+Consider: [specific recommendation 1]
+Consider: [specific recommendation 2]
+Consider: [specific recommendation 3]
+
+Generate the summary now:`;
+
+            let clinicalSummary = '';
+
+            try {
+                // Call OpenAI API
+                const completion = await openai.chat.completions.create({
+                    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+                    messages: [
+                        {
+                            role: 'system',
+                            content: 'You are a clinical nutritionist writing professional clinical summaries for functional medicine practitioners and therapists. Your summaries are objective, evidence-based, and focus on patterns and observations rather than diagnoses.'
+                        },
+                        {
+                            role: 'user',
+                            content: prompt
+                        }
+                    ],
+                    temperature: 0.7,
+                    max_tokens: 2000,
+                });
+
+                clinicalSummary = completion.choices[0]?.message?.content || '';
+
+                // If OpenAI fails, fall back to basic summary
+                if (!clinicalSummary || clinicalSummary.trim().length === 0) {
+                    throw new Error('OpenAI returned empty response');
+                }
+            } catch (openaiError: any) {
+                console.error('OpenAI error:', openaiError);
+                // Fallback to basic summary if OpenAI fails
+                clinicalSummary = `CLINICAL NUTRITION SUMMARY
+Generated: ${generatedDate}
+Period: ${periodStartStr} to ${periodEndStr}
+Type: Full Summary
+
+Program Engagement
+- Current Module: ${currentModule}${workbookData?.moduleName ? ' - ' + workbookData.moduleName : ''}
+- Days in Program: ${daysInProgram}
+
+Eating Pattern Analysis
+Client maintains ${avgFoodLogsPerDay.toFixed(1)} food logs per day on average. ${consecutiveLogs > 0 ? `Consecutive reviews with all food groups: ${consecutiveLogs}.` : ''}
+
+Food Group Distribution shows ${proteinFreq > 0 ? `adequate protein (${proteinFreq.toFixed(1)} times/day), ` : ''}${grainFreq > 0 ? `grain intake (${grainFreq.toFixed(1)} times/day), ` : ''}${vegetableFreq > 0 ? `vegetable intake (${vegetableFreq.toFixed(1)} times/day), ` : ''}${fruitFreq < 1 ? `limited fruit consumption (${fruitFreq.toFixed(1)} times/day), ` : ''}${bnsFreq < 1 ? `limited beans/nuts/seeds (${bnsFreq.toFixed(1)} times/day), ` : ''}${dairyFreq > 0 ? `moderate dairy intake (${dairyFreq.toFixed(1)} servings/day).` : ''}
+
+${uniqueNewFoods.length > 0 ? `New foods introduced: ${uniqueNewFoods.slice(0, 5).join(', ')}\nFood variety trajectory: ${uniqueNewFoods.length >= 3 ? 'Expanding' : 'Developing'}\n` : ''}
+
+Therapeutic Insights
+${activeIntentions.length > 0 ? `Most recent intention: "${activeIntentions[0]}"\n` : ''}
+
+Clinical Impressions
+Client demonstrates ${reviewThemes.emotionalPatterns.length > 0 ? 'increasing awareness of emotional eating triggers. ' : ''}${uniqueNewFoods.length >= 3 ? 'Positive expansion in food variety suggests reduced food anxiety. ' : ''}${consecutiveLogs > 0 ? 'Consistent food logging indicates good program engagement.' : ''}
+
+Recommendations for Clinical Team
+${reviewThemes.emotionalPatterns.length > 0 ? 'Consider: Exploring stress coping strategies beyond food\n' : ''}${reviewThemes.breakthroughMoments.length > 0 ? 'Consider: Reinforcing success with food variety expansion\n' : ''}${fruitFreq < 1 ? 'Consider: Supporting gradual fruit intake increase' : 'Continue monitoring progress and support client goals'}`;
+            }
+
+            return {
+                success: true,
+                data: {
+                    clinicalSummary: clinicalSummary,
+                    summaryMetadata: {
+                        generatedDate: generatedDate,
+                        periodStart: periodStartStr,
+                        periodEnd: periodEndStr,
+                        userId: userId,
+                        userName: userData?.metadata?.first_name && userData?.metadata?.last_name 
+                            ? `${userData.metadata.first_name} ${userData.metadata.last_name}` 
+                            : userData?.user?.email || 'Unknown',
+                        userEmail: userData?.user?.email || ''
+                    },
+                    metrics: {
+                        programEngagement: {
+                            currentModule: currentModule,
+                            moduleName: workbookData?.moduleName || '',
+                            daysInProgram: daysInProgram,
+                            currentCycle: currentCycle
+                        },
+                        eatingPatterns: {
+                            avgFoodLogsPerDay: avgFoodLogsPerDay,
+                            consecutiveLogs: consecutiveLogs,
+                            totalReviews: totalReviewCount
+                        },
+                        foodGroupFrequency: {
+                            fruit: fruitFreq,
+                            vegetable: vegetableFreq,
+                            grain: grainFreq,
+                            dairy: dairyFreq,
+                            protein: proteinFreq,
+                            beansNutsSeeds: bnsFreq
+                        },
+                        newFoods: uniqueNewFoods,
+                        hungerFullness: hungerFullnessData,
+                        intentions: activeIntentions,
+                        reviewThemes: reviewThemes,
+                        workbookProgress: {
+                            gemsPinned: gemsCount,
+                            assignmentsCompleted: completedAssignments
+                        }
+                    },
+                    rawData: {
+                        userData: userData,
+                        foodLogsData: foodLogsData,
+                        reviewsData: reviewsData,
+                        workbookData: workbookData
+                    }
+                },
+                message: 'User summary generated successfully'
+            };
+
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);

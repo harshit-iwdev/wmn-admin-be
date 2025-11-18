@@ -197,4 +197,12 @@ export class UsersController {
         return this.usersService.fetchAdminCsvData(body.userIds);
     }
 
+    @UseGuards(AuthGuard)
+    @Get('/generate-user-summary/:userId')
+    async generateUserSummary(
+        @Param('userId') userId: string
+    ) {
+        return this.usersService.generateUserSummary(userId);
+    }
+
 }

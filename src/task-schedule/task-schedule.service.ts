@@ -177,4 +177,48 @@ export class TaskScheduleService {
             console.error(error, "---error---174");
         }
     }
+
+    async updateAllUserStatusService() {
+        try {
+            const response = await axios.get(`https://api.encharge.io/v1/segments/956329/people?limit=10000&order=asc&ignoreAnonymous=true&sort=firstName`, {
+                headers: {
+                  'X-Encharge-Token': process.env.INGEST_API_KEY,
+                  'Content-Type': 'application/json',
+                },
+              });
+
+            const allData = response.data.people;
+
+            let peopleData = allData.filter((item: any) => item.userId && item.type);
+
+            for (let i = 0; i < peopleData.length; i++) {
+                const element = peopleData[i];
+
+                if (element && element.type) {
+                    let metadataUpdateQuery = `UPDATE public.metadata set "revCatStatus" = :revCatStatus where "user_id" = :userId`;
+                    const metadataUpdate: any = await this.userModel?.sequelize?.query(metadataUpdateQuery, {
+                        type: QueryTypes.INSERT,
+                        raw: true,
+                        replacements: {
+                            userId: element.userId,
+                            revCatStatus: element.type
+                        }
+                    });
+                }
+                else {
+                    console.log("Skipping userId: ", element.userId, "---element.userId---");
+                    continue;
+                }
+            }
+
+            return "all done successfully";
+        }
+        catch (error) {
+            console.error(error, "---error---184");
+            return "error in updating all user status";
+        }
+    }
+
+
+
 }

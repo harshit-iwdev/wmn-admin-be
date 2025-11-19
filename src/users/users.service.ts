@@ -105,36 +105,56 @@ export class UsersService {
                 replacements: filterOpts,
             });
 
-            if (users && users.length>0) {
-                for (let i = 0; i < users.length; i++) {
-                    let userId = users[i].user.id;
+            // if (users && users.length>0) {
+            //     for (let i = 0; i < users.length; i++) {
+            //         let userId = users[i].user.id;
+            //         try {
+            //             // // RevCat API
+            //             // const revCatData = await axios.get(`${process.env.REV_CAT_BASE_URL}/v2/projects/${process.env.REV_CAT_PROJECT_KEY}/customers/${userId}/subscriptions`, {
+            //             //     headers: {
+            //             //         'Authorization': `Bearer ${process.env.REV_CAT_KEY_V2}`,
+            //             //         'Content-Type': 'application/json',
+            //             //     },
+            //             // });
+            //             // if (revCatData.data.items && revCatData.data.items.length > 0) {
+            //             //     let metadataCreateQuery = `UPDATE public.metadata set "revCatStatus" = :revCatStatus where "user_id" = :userId`;
+            //             //     const metadataCreate: any = await this.userModel?.sequelize?.query(metadataCreateQuery, {
+            //             //         type: QueryTypes.INSERT,
+            //             //         raw: true,
+            //             //         replacements: {
+            //             //             userId: userId,
+            //             //             revCatStatus: revCatData.data.items[0].status
+            //             //         }
+            //             //     });
+            //             // }
 
-                    try {
-                        const revCatData = await axios.get(`${process.env.REV_CAT_BASE_URL}/v2/projects/${process.env.REV_CAT_PROJECT_KEY}/customers/${userId}/subscriptions`, {
-                            headers: {
-                                'Authorization': `Bearer ${process.env.REV_CAT_KEY_V2}`,
-                                'Content-Type': 'application/json',
-                            },
-                        });
-
-                        if (revCatData.data.items && revCatData.data.items.length > 0) {
-                            let metadataCreateQuery = `UPDATE public.metadata set "revCatStatus" = :revCatStatus where "user_id" = :userId`;
-                            const metadataCreate: any = await this.userModel?.sequelize?.query(metadataCreateQuery, {
-                                type: QueryTypes.INSERT,
-                                raw: true,
-                                replacements: {
-                                    userId: userId,
-                                    revCatStatus: revCatData.data.items[0].status
-                                }
-                            });
-                        }
-                    } catch (error: any) {
-                        console.error(`Error fetching RevCat data for user ${userId}:`, error.message || error);
-                        // Continue to next iteration
-                        continue;
-                    }
-                }
-            }
+            //             // // Encharge API
+            //             // const response = await axios.get(`https://api.encharge.io/v1/segments/956329/people?limit=10000&order=asc&ignoreAnonymous=true&sort=firstName`, {
+            //             //     headers: {
+            //             //       'X-Encharge-Token': process.env.INGEST_API_KEY,
+            //             //       'Content-Type': 'application/json',
+            //             //     },
+            //             //   });
+            //             // const data = response.data.people;
+            //             // let userData = data.find((item: any) => item.userId === userId);
+            //             // if (userData && userData.type) {
+            //             //     let metadataCreateQuery = `UPDATE public.metadata set "revCatStatus" = :revCatStatus where "user_id" = :userId`;
+            //             //     const metadataCreate: any = await this.userModel?.sequelize?.query(metadataCreateQuery, {
+            //             //         type: QueryTypes.INSERT,
+            //             //         raw: true,
+            //             //         replacements: {
+            //             //             userId: userId,
+            //             //             revCatStatus: userData.type
+            //             //         }
+            //             //     });
+            //             // }
+            //         } catch (error: any) {
+            //             console.error(`Error fetching RevCat data for user ${userId}:`, error.message || error);
+            //             // Continue to next iteration
+            //             continue;
+            //         }
+            //     }
+            // }
 
             return {
                 success: true,

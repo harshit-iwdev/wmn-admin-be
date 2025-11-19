@@ -423,6 +423,8 @@ export class UsersService {
                     review_id: item.review_id,
                     review_created_at: item.review_created_at,
                     review_date: item.review_date,
+                    hunger: parseInt(item.hunger),
+                    fullness: parseInt(item.fullness),
                     log_dates: [item.log_date],   // keep all log dates if needed
                     foodLogs: [...item.foodLogs],
                     aiFoodRecognition: [...item.aiFoodRecognition],
@@ -535,16 +537,24 @@ export class UsersService {
             const totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates
             const totalReviewCount = reviewIdsArr.length;
 
+            let hungerFullnessData = {
+                lowHungerCount: 0,
+                highFullnessCount: 0,
+                avgPreMealHunger: 0,
+                avgPostMealFullness: 0,
+                totalMeals: 0
+            };
+
             if (reviewIdsArr.length > 0) {
-                let executeFoodLogsQuery = `SELECT DATE("FL"."created_at") AS log_date,
+                let executeFoodLogsQuery = `SELECT DATE("FL"."created_at") AS log_date, "FL"."hunger" as hunger, "FL"."fullness" as fullness,
                     "RFL"."review_id", "R"."created_at" as "review_created_at", "R"."review_date" as "review_date", jsonb_agg(to_jsonb("FL"."food_groups")) AS "foodLogs",
                     jsonb_agg(to_jsonb("AIFR")) AS "aiFoodRecognition" FROM public.food_logs AS "FL"
                     LEFT JOIN public."ai_food_recognition" AS "AIFR" ON "FL"."ai_food_data_id" = "AIFR"."id"
                     JOIN public."review_food_logs" as "RFL" on "RFL"."food_log_id" = "FL"."id"
                     JOIN public."reviews" as "R" on "RFL"."review_id" = "R"."id"
                         WHERE "FL"."userId" = :id AND "FL"."id" IN (:foodLogsIdsArr)
-                            GROUP BY DATE("FL"."created_at"), 
-                            "RFL"."review_id", "R"."created_at", "R"."review_date"
+                            GROUP BY DATE("FL"."created_at"), "RFL"."review_id", "R"."created_at",
+                            "R"."review_date", "FL"."hunger", "FL"."fullness"
                             ORDER BY log_date ASC;`;
 
                 const allFoodLogs: any = await this.userModel?.sequelize?.query(
@@ -560,8 +570,20 @@ export class UsersService {
                         },
                     }
                 );
-
                 const foodLogs = await this.mergeFoodLogs(allFoodLogs);
+
+                foodLogs.map((dt: any) => {
+                    if (dt.hunger <= 2) {
+                        hungerFullnessData.lowHungerCount += 1;
+                    }
+                    if (dt.fullness >= 7) {
+                        hungerFullnessData.highFullnessCount += 1;
+                    }
+                })
+
+                hungerFullnessData.avgPreMealHunger = hungerFullnessData.lowHungerCount / 10;
+                hungerFullnessData.avgPostMealFullness = hungerFullnessData.highFullnessCount / 10;
+                hungerFullnessData.totalMeals = foodLogs.length;
 
                 let foodLogsIdsArrAvgCountQuery = `SELECT COUNT(id) as "count" FROM public.food_logs
                     WHERE "userId" = :id and "id" IN (:foodLogsIdsArr) and "food_type" NOT IN ('Other', '')`;
@@ -718,7 +740,8 @@ export class UsersService {
                     avgFoodLogCountPerDay: avgFoodLogCountPerDay,
                     aiConfirmedFoodGroups: aiConfirmedFoodGroups,
                     lastArchiveEndDate: lastArchiveEndDate,
-                    basicStartDate: basicStartDate
+                    basicStartDate: basicStartDate,
+                    hungerFullnessData
                 }
 
                 return { success: true, data: result, message: 'User food logs fetched successfully' };
@@ -757,7 +780,8 @@ export class UsersService {
                         wildcard: { count: 0, description: [''] }
                     },
                     lastArchiveEndDate: lastArchiveEndDate,
-                    basicStartDate: basicStartDate
+                    basicStartDate: basicStartDate,
+                    hungerFullnessData
                 }
 
                 return { success: true, data: result, message: 'User food logs fetched successfully' };
@@ -1687,9 +1711,7 @@ export class UsersService {
                         replacements: { patientIds: patientIds },
                     }
                 );
-                console.log(subscribedUserCount, "subscribedUserCount");
                 subscribedUserCount = subscribedUserCountData[0]?.subscribedUserCount || 0;
-                console.log(subscribedUserCount, "subscribedUserCount");
             } else {
                 const apiKey = process.env.REV_CAT_KEY_V2 || process.env.REVENUECAT_API_KEY;
                 const projectKey = process.env.REV_CAT_PROJECT_KEY;
@@ -1702,7 +1724,6 @@ export class UsersService {
                 });
                 const data = await response.json();
                 let subscribedUserData = data.metrics.find((metric: any) => metric.id === 'active_subscriptions');
-                console.log(subscribedUserData, "subscribedUserData");
                 subscribedUserCount = subscribedUserData.value || 0;
             }
 
@@ -2691,8 +2712,6 @@ export class UsersService {
                         //         updated_at: new Date()
                         //     }
                         // });
-                        // console.log(metadataCreate, "---metadataCreate---");
-                        // console.log(`Metadata for user ${email} created successfully`);
                     }
                 } catch (userError) {
                     console.error(`Failed to create user ${email}:`, userError.message);
@@ -2970,8 +2989,36 @@ export class UsersService {
     async generateUserSummary(userId: string): Promise<any> {
         try {
 
+            const prevUserSummary: any = await this.userModel.sequelize?.query(
+                `SELECT * FROM public.user_summary WHERE "user_id" = :userId
+                    ORDER BY end_date DESC LIMIT 1`, {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { userId: userId }
+                }
+            )
+
+            let startDate = '';
+            let endDate = '';
+            if (prevUserSummary.length == 0) {
+                const userResp: any = await this.userModel.sequelize?.query(
+                    `SELECT * FROM auth.users WHERE "id" = :userId`, {
+                        type: QueryTypes.SELECT,
+                        raw: true,
+                        replacements: { userId: userId }
+                    }
+                )
+                startDate = userResp[0].created_at;
+                endDate = new Date().toISOString();
+            } else {
+                let tempEndDate : any = new Date(prevUserSummary[0]?.end_date);
+                tempEndDate.setDate(tempEndDate.getDate() + 1);
+                startDate = await this.formatDateUTC(tempEndDate);
+                endDate = await this.formatDateUTC(new Date());
+            }
+
             let userDataResponse = await this.fetchUserDetailsById(userId);
-            let foodLogsDataResponse = await this.fetchUserFoodLogs({ id: userId, startDate: '', endDate: '' });
+            let foodLogsDataResponse = await this.fetchUserFoodLogs({ id: userId, startDate: startDate, endDate: endDate });
             let reviewsDataResponse = await this.fetchUserFoodLogJournal(userId, null, null);
             let workbookDataResponse = await this.fetchUserWorkbook(userId);
 
@@ -3014,48 +3061,7 @@ export class UsersService {
             const uniqueNewFoods = Array.from(new Set(newFoods)).slice(0, 10); // Limit to 10 most recent
 
             // Hunger/Fullness Patterns - Query food logs for hunger/fullness data
-            let hungerFullnessData = {
-                lowHungerCount: 0,
-                highFullnessCount: 0,
-                avgPreMealHunger: 0,
-                avgPostMealFullness: 0,
-                totalMeals: 0
-            };
-
-            try {
-                // const hungerFullnessQuery = `SELECT 
-                //     COUNT(*) FILTER (WHERE "pre_meal_hunger" <= 2) as "low_hunger_count",
-                //     COUNT(*) FILTER (WHERE "post_meal_fullness" >= 7) as "high_fullness_count",
-                //     AVG("pre_meal_hunger") as "avg_pre_hunger",
-                //     AVG("post_meal_fullness") as "avg_post_fullness",
-                //     COUNT(*) as "total_meals"
-                //     FROM public.food_logs 
-                //     WHERE "userId" = :userId 
-                //     AND "pre_meal_hunger" IS NOT NULL 
-                //     AND "post_meal_fullness" IS NOT NULL`;
-                
-                // const hungerFullnessResult: any = await this.userModel?.sequelize?.query(
-                //     hungerFullnessQuery,
-                //     {
-                //         type: QueryTypes.SELECT,
-                //         raw: true,
-                //         replacements: { userId: userId },
-                //     }
-                // );
-
-                // if (hungerFullnessResult && hungerFullnessResult[0]) {
-                //     hungerFullnessData = {
-                //         lowHungerCount: parseInt(hungerFullnessResult[0].low_hunger_count) || 0,
-                //         highFullnessCount: parseInt(hungerFullnessResult[0].high_fullness_count) || 0,
-                //         avgPreMealHunger: parseFloat(hungerFullnessResult[0].avg_pre_hunger) || 0,
-                //         avgPostMealFullness: parseFloat(hungerFullnessResult[0].avg_post_fullness) || 0,
-                //         totalMeals: parseInt(hungerFullnessResult[0].total_meals) || 0
-                //     };
-                // }
-            } catch (err) {
-                // If hunger/fullness columns don't exist, continue without them
-                console.log('Hunger/fullness data not available:', err);
-            }
+            let hungerFullnessData = { ...foodLogsDataResponse.data.hungerFullnessData };
 
             // Intentions
             const currentIntentions = reviewsData?.intentions || [];
@@ -3341,6 +3347,14 @@ Client demonstrates ${reviewThemes.emotionalPatterns.length > 0 ? 'increasing aw
 Recommendations for Clinical Team
 ${reviewThemes.emotionalPatterns.length > 0 ? 'Consider: Exploring stress coping strategies beyond food\n' : ''}${reviewThemes.breakthroughMoments.length > 0 ? 'Consider: Reinforcing success with food variety expansion\n' : ''}${fruitFreq < 1 ? 'Consider: Supporting gradual fruit intake increase' : 'Continue monitoring progress and support client goals'}`;
             }
+
+            await this.userModel.sequelize?.query(
+                `UPDATE public.user_summary SET start_date = :startDate AND end_date = :endDate WHERE user_id = :userId`,
+                {
+                    type: QueryTypes.SELECT, raw: true,
+                    replacements: { startDate, endDate, userId }
+                }
+            )
 
             return {
                 success: true,

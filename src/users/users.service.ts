@@ -2989,6 +2989,22 @@ export class UsersService {
     async generateUserSummary(userId: string): Promise<any> {
         try {
 
+            // return {
+            //     "success": true,
+            //     "data": {
+            //         "clinicalSummary": "CLINICAL NUTRITION SUMMARY  \nGenerated: 2025-11-20 12:08  \nPeriod: 2025-10-21 to 2025-11-20  \nType: Full Summary  \n\nProgram Engagement  \n- Current Module: 29  \n- Days in Program: 44  \n\nEating Pattern Analysis  \nThe current food logging patterns indicate a lack of recorded meals, with an average of 0.0 food logs per day and no evidence of food group intake across fruits, vegetables, grains, dairy/alternatives, protein/alternatives, and beans/nuts/seeds. This suggests a significant limitation in dietary intake and a potential lack of structured meal timing or frequency. The absence of documented meals may reflect challenges in meal preparation, motivation, or awareness of dietary patterns.\n\nFood Group Distribution shows severe limitations, as no food items from any major food group have been logged, indicating a need for immediate attention to dietary variety and nutrient adequacy.\n\nNew foods introduced: None recorded  \nFood variety trajectory: Stable (at zero variety)\n\nHunger-Satiety Regulation  \n- Episodes of overfullness: Not applicable due to lack of food intake data  \n- Client showing no recorded awareness of hunger or fullness, as no patterns are established.\n\nTherapeutic Insights  \nMost recent intention: None stated  \n\nNightly Review Themes:  \n- Theme 1: Lack of engagement with food logging and meal planning  \n- Theme 2: Absence of feedback or reflections on dietary choices  \n- Theme 3: No recorded emotional or contextual factors related to eating  \n\nClinical Impressions  \nThe client shows a concerning pattern of minimal to no engagement in dietary practices, as evidenced by the absence of food logging and food group consumption. This lack of intake may hinder progress toward therapeutic goals and suggests a need for intervention to support motivation and awareness. Continued monitoring and encouragement are essential to foster engagement and a more varied diet.\n\nRecommendations for Clinical Team  \nConsider: Implementing structured meal planning sessions to enhance engagement  \nConsider: Encouraging the client to start a simple food diary to promote awareness of eating patterns  \nConsider: Exploring potential barriers to food preparation or motivation in future sessions",
+            //         "summaryMetadata": {
+            //             "generatedDate": "2025-11-20 12:08",
+            //             "periodStart": "2025-10-21",
+            //             "periodEnd": "2025-11-20",
+            //             "userId": "87161e13-2ea3-4fc3-91b7-3aae0d89994e",
+            //             "userName": "Sue Gardner",
+            //             "userEmail": "sgardner555@outlook.com"
+            //         },
+            //     },
+            //     "message": "User summary generated successfully"
+            // }
+
             const prevUserSummary: any = await this.userModel.sequelize?.query(
                 `SELECT * FROM public.user_summary WHERE "user_id" = :userId
                     ORDER BY end_date DESC LIMIT 1`, {
@@ -3095,7 +3111,7 @@ export class UsersService {
 
                 // Extract breakthrough moments (positive language in whatWentWell)
                 if (whatWentWell && whatWentWell.length > 20) {
-                    const positiveKeywords = ['celebrat', 'success', 'proud', 'breakthrough', 'improved', 'better', 'tried', 'new'];
+                    const positiveKeywords = ['celebrate', 'success', 'proud', 'breakthrough', 'improved', 'better', 'tried', 'new'];
                     if (positiveKeywords.some(keyword => whatWentWell.toLowerCase().includes(keyword))) {
                         if (reviewThemes.breakthroughMoments.length < 3) {
                             reviewThemes.breakthroughMoments.push(whatWentWell.substring(0, 100));
@@ -3185,116 +3201,114 @@ export class UsersService {
                 };
             });
 
-            // Initialize OpenAI client
+            // Create comprehensive prompt
+            const prompt = `You are a clinical nutritionist generating a professional clinical summary for functional medicine or therapy notes.
+                REQUIREMENTS:
+                1. Use clinical but accessible language
+                2. Be concise - aim for 1 page maximum
+                3. Focus on patterns, not individual meals
+                4. Highlight clinically relevant changes
+                5. Avoid diagnosis or medical advice
+                6. Present observations objectively
+                7. Flag concerning patterns without alarm
+
+                ANALYSIS PRIORITIES:
+                1. Eating behavior patterns (timing, frequency, context)
+                2. Hunger/satiety dysregulation
+                3. Food variety and restriction patterns
+                4. Emotional eating indicators
+                5. Progress toward therapeutic goals
+
+                CLIENT DATA:
+                Program Engagement:
+                - Current Module: ${dataSummary.programEngagement.currentModule}${dataSummary.programEngagement.moduleName ? ' - ' + dataSummary.programEngagement.moduleName : ''}
+                - Days in Program: ${dataSummary.programEngagement.daysInProgram}
+                - Current Cycle: ${dataSummary.programEngagement.currentCycle}
+
+                Food Logging Patterns:
+                - Average food logs per day: ${dataSummary.eatingPatterns.avgFoodLogsPerDay}
+                - Consecutive reviews with all food groups: ${dataSummary.eatingPatterns.consecutiveLogsWithAllGroups}
+                - Total reviews: ${dataSummary.eatingPatterns.totalReviews}
+
+                Average Food Group Frequency (daily averages):
+                - Fruits (F): ${dataSummary.foodGroupFrequency.fruit} times/day
+                - Vegetables (V): ${dataSummary.foodGroupFrequency.vegetable} times/day
+                - Grains (G): ${dataSummary.foodGroupFrequency.grain} times/day
+                - Dairy/Alternatives (D): ${dataSummary.foodGroupFrequency.dairy} times/day
+                - Protein/Alternatives (P): ${dataSummary.foodGroupFrequency.protein} times/day
+                - Beans/nuts/seeds (BNS): ${dataSummary.foodGroupFrequency.beansNutsSeeds} times/day
+
+                New Foods Introduced: ${dataSummary.newFoods.length > 0 ? dataSummary.newFoods.join(', ') : 'None recorded'}
+
+                Hunger/Fullness Patterns:
+                ${dataSummary.hungerFullness.totalMeals > 0 ? `
+                - Count of meals with hunger ≤2 (not hungry enough): ${dataSummary.hungerFullness.lowHungerCount}
+                - Count of meals with fullness ≥7 (overly full): ${dataSummary.hungerFullness.highFullnessCount}
+                - Average pre-meal hunger: ${dataSummary.hungerFullness.avgPreMealHunger.toFixed(1)}/10
+                - Average post-meal fullness: ${dataSummary.hungerFullness.avgPostMealFullness.toFixed(1)}/10
+                ` : '- Data not available'}
+
+                Current Intentions: ${dataSummary.intentions.length > 0 ? dataSummary.intentions.join('; ') : 'None'}
+
+                Nightly Review Themes (from recent reviews):
+                ${dataSummary.reviewThemes.emotionalPatterns.length > 0 ? `- Emotional patterns: ${dataSummary.reviewThemes.emotionalPatterns.join('; ')}\n` : ''}
+                ${dataSummary.reviewThemes.recurringChallenges.length > 0 ? `- Recurring challenges: ${dataSummary.reviewThemes.recurringChallenges.join('; ')}\n` : ''}
+                ${dataSummary.reviewThemes.breakthroughMoments.length > 0 ? `- Breakthrough moments: ${dataSummary.reviewThemes.breakthroughMoments.join('; ')}\n` : ''}
+
+                Workbook Assignments:
+                - Gems saved/pinned: ${dataSummary.workbookProgress.gemsPinned}
+                - Assignments completed: ${dataSummary.workbookProgress.assignmentsCompleted}
+
+                Sample Recent Reviews:
+                ${JSON.stringify(sampleReviews, null, 2)}
+
+                Generate a clinical summary in the following format (match this structure exactly):
+
+                CLINICAL NUTRITION SUMMARY
+                Generated: ${generatedDate}
+                Period: ${periodStartStr} to ${periodEndStr}
+                Type: Full Summary
+
+                Program Engagement
+                - Current Module: [module number] - [module name if available]
+                - Days in Program: [days]
+
+                Eating Pattern Analysis
+                [Analyze meal timing, frequency, and food group distribution. Be specific about patterns observed.]
+
+                Food Group Distribution shows [describe adequacy/limitations of each group with specific numbers].
+
+                New foods introduced: [list if any]
+                Food variety trajectory: [Expanding/Developing/Stable]
+
+                Hunger-Satiety Regulation
+                - Episodes of overfullness: [count] times ([context if available])
+                - Client showing [observation about hunger/fullness awareness]
+
+                Therapeutic Insights
+                Most recent intention: "[intention text]"
+
+                Nightly Review Themes:
+                - [Theme 1 with specific example]
+                - [Theme 2 with specific example]
+                - [Theme 3 with specific example]
+
+                Clinical Impressions
+                [2-3 sentences summarizing key observations about client progress, patterns, and areas needing attention. Be objective and clinical.]
+
+                Recommendations for Clinical Team
+                Consider: [specific recommendation 1]
+                Consider: [specific recommendation 2]
+                Consider: [specific recommendation 3]
+
+                Generate the summary now:`;
+                console.log(prompt, "---prompt---3296");
+
+                            // Initialize OpenAI client
             const openai = new OpenAI({
                 apiKey: process.env.OPENAI_API_KEY,
             });
-
-            // Create comprehensive prompt
-            const prompt = `You are a clinical nutritionist generating a professional clinical summary for functional medicine or therapy notes.
-
-REQUIREMENTS:
-1. Use clinical but accessible language
-2. Be concise - aim for 1 page maximum
-3. Focus on patterns, not individual meals
-4. Highlight clinically relevant changes
-5. Avoid diagnosis or medical advice
-6. Present observations objectively
-7. Flag concerning patterns without alarm
-
-ANALYSIS PRIORITIES:
-1. Eating behavior patterns (timing, frequency, context)
-2. Hunger/satiety dysregulation
-3. Food variety and restriction patterns
-4. Emotional eating indicators
-5. Progress toward therapeutic goals
-
-CLIENT DATA:
-Program Engagement:
-- Current Module: ${dataSummary.programEngagement.currentModule}${dataSummary.programEngagement.moduleName ? ' - ' + dataSummary.programEngagement.moduleName : ''}
-- Days in Program: ${dataSummary.programEngagement.daysInProgram}
-- Current Cycle: ${dataSummary.programEngagement.currentCycle}
-
-Food Logging Patterns:
-- Average food logs per day: ${dataSummary.eatingPatterns.avgFoodLogsPerDay}
-- Consecutive reviews with all food groups: ${dataSummary.eatingPatterns.consecutiveLogsWithAllGroups}
-- Total reviews: ${dataSummary.eatingPatterns.totalReviews}
-
-Average Food Group Frequency (daily averages):
-- Fruits (F): ${dataSummary.foodGroupFrequency.fruit} times/day
-- Vegetables (V): ${dataSummary.foodGroupFrequency.vegetable} times/day
-- Grains (G): ${dataSummary.foodGroupFrequency.grain} times/day
-- Dairy/Alternatives (D): ${dataSummary.foodGroupFrequency.dairy} times/day
-- Protein/Alternatives (P): ${dataSummary.foodGroupFrequency.protein} times/day
-- Beans/nuts/seeds (BNS): ${dataSummary.foodGroupFrequency.beansNutsSeeds} times/day
-
-New Foods Introduced: ${dataSummary.newFoods.length > 0 ? dataSummary.newFoods.join(', ') : 'None recorded'}
-
-Hunger/Fullness Patterns:
-${dataSummary.hungerFullness.totalMeals > 0 ? `
-- Count of meals with hunger ≤2 (not hungry enough): ${dataSummary.hungerFullness.lowHungerCount}
-- Count of meals with fullness ≥7 (overly full): ${dataSummary.hungerFullness.highFullnessCount}
-- Average pre-meal hunger: ${dataSummary.hungerFullness.avgPreMealHunger.toFixed(1)}/10
-- Average post-meal fullness: ${dataSummary.hungerFullness.avgPostMealFullness.toFixed(1)}/10
-` : '- Data not available'}
-
-Current Intentions: ${dataSummary.intentions.length > 0 ? dataSummary.intentions.join('; ') : 'None'}
-
-Nightly Review Themes (from recent reviews):
-${dataSummary.reviewThemes.emotionalPatterns.length > 0 ? `- Emotional patterns: ${dataSummary.reviewThemes.emotionalPatterns.join('; ')}\n` : ''}
-${dataSummary.reviewThemes.recurringChallenges.length > 0 ? `- Recurring challenges: ${dataSummary.reviewThemes.recurringChallenges.join('; ')}\n` : ''}
-${dataSummary.reviewThemes.breakthroughMoments.length > 0 ? `- Breakthrough moments: ${dataSummary.reviewThemes.breakthroughMoments.join('; ')}\n` : ''}
-
-Workbook Assignments:
-- Gems saved/pinned: ${dataSummary.workbookProgress.gemsPinned}
-- Assignments completed: ${dataSummary.workbookProgress.assignmentsCompleted}
-
-Sample Recent Reviews:
-${JSON.stringify(sampleReviews, null, 2)}
-
-Generate a clinical summary in the following format (match this structure exactly):
-
-CLINICAL NUTRITION SUMMARY
-Generated: ${generatedDate}
-Period: ${periodStartStr} to ${periodEndStr}
-Type: Full Summary
-
-Program Engagement
-- Current Module: [module number] - [module name if available]
-- Days in Program: [days]
-
-Eating Pattern Analysis
-[Analyze meal timing, frequency, and food group distribution. Be specific about patterns observed.]
-
-Food Group Distribution shows [describe adequacy/limitations of each group with specific numbers].
-
-New foods introduced: [list if any]
-Food variety trajectory: [Expanding/Developing/Stable]
-
-Hunger-Satiety Regulation
-- Episodes of overfullness: [count] times ([context if available])
-- Client showing [observation about hunger/fullness awareness]
-
-Therapeutic Insights
-Most recent intention: "[intention text]"
-
-Nightly Review Themes:
-- [Theme 1 with specific example]
-- [Theme 2 with specific example]
-- [Theme 3 with specific example]
-
-Clinical Impressions
-[2-3 sentences summarizing key observations about client progress, patterns, and areas needing attention. Be objective and clinical.]
-
-Recommendations for Clinical Team
-Consider: [specific recommendation 1]
-Consider: [specific recommendation 2]
-Consider: [specific recommendation 3]
-
-Generate the summary now:`;
-
             let clinicalSummary = '';
-
             try {
                 // Call OpenAI API
                 const completion = await openai.chat.completions.create({
@@ -3323,35 +3337,35 @@ Generate the summary now:`;
                 console.error('OpenAI error:', openaiError);
                 // Fallback to basic summary if OpenAI fails
                 clinicalSummary = `CLINICAL NUTRITION SUMMARY
-Generated: ${generatedDate}
-Period: ${periodStartStr} to ${periodEndStr}
-Type: Full Summary
+                    Generated: ${generatedDate}
+                    Period: ${periodStartStr} to ${periodEndStr}
+                    Type: Full Summary
 
-Program Engagement
-- Current Module: ${currentModule}${workbookData?.moduleName ? ' - ' + workbookData.moduleName : ''}
-- Days in Program: ${daysInProgram}
+                    Program Engagement
+                    - Current Module: ${currentModule}${workbookData?.moduleName ? ' - ' + workbookData.moduleName : ''}
+                    - Days in Program: ${daysInProgram}
 
-Eating Pattern Analysis
-Client maintains ${avgFoodLogsPerDay.toFixed(1)} food logs per day on average. ${consecutiveLogs > 0 ? `Consecutive reviews with all food groups: ${consecutiveLogs}.` : ''}
+                    Eating Pattern Analysis
+                    Client maintains ${avgFoodLogsPerDay.toFixed(1)} food logs per day on average. ${consecutiveLogs > 0 ? `Consecutive reviews with all food groups: ${consecutiveLogs}.` : ''}
 
-Food Group Distribution shows ${proteinFreq > 0 ? `adequate protein (${proteinFreq.toFixed(1)} times/day), ` : ''}${grainFreq > 0 ? `grain intake (${grainFreq.toFixed(1)} times/day), ` : ''}${vegetableFreq > 0 ? `vegetable intake (${vegetableFreq.toFixed(1)} times/day), ` : ''}${fruitFreq < 1 ? `limited fruit consumption (${fruitFreq.toFixed(1)} times/day), ` : ''}${bnsFreq < 1 ? `limited beans/nuts/seeds (${bnsFreq.toFixed(1)} times/day), ` : ''}${dairyFreq > 0 ? `moderate dairy intake (${dairyFreq.toFixed(1)} servings/day).` : ''}
+                    Food Group Distribution shows ${proteinFreq > 0 ? `adequate protein (${proteinFreq.toFixed(1)} times/day), ` : ''}${grainFreq > 0 ? `grain intake (${grainFreq.toFixed(1)} times/day), ` : ''}${vegetableFreq > 0 ? `vegetable intake (${vegetableFreq.toFixed(1)} times/day), ` : ''}${fruitFreq < 1 ? `limited fruit consumption (${fruitFreq.toFixed(1)} times/day), ` : ''}${bnsFreq < 1 ? `limited beans/nuts/seeds (${bnsFreq.toFixed(1)} times/day), ` : ''}${dairyFreq > 0 ? `moderate dairy intake (${dairyFreq.toFixed(1)} servings/day).` : ''}
 
-${uniqueNewFoods.length > 0 ? `New foods introduced: ${uniqueNewFoods.slice(0, 5).join(', ')}\nFood variety trajectory: ${uniqueNewFoods.length >= 3 ? 'Expanding' : 'Developing'}\n` : ''}
+                    ${uniqueNewFoods.length > 0 ? `New foods introduced: ${uniqueNewFoods.slice(0, 5).join(', ')}\nFood variety trajectory: ${uniqueNewFoods.length >= 3 ? 'Expanding' : 'Developing'}\n` : ''}
 
-Therapeutic Insights
-${activeIntentions.length > 0 ? `Most recent intention: "${activeIntentions[0]}"\n` : ''}
+                    Therapeutic Insights
+                    ${activeIntentions.length > 0 ? `Most recent intention: "${activeIntentions[0]}"\n` : ''}
 
-Clinical Impressions
-Client demonstrates ${reviewThemes.emotionalPatterns.length > 0 ? 'increasing awareness of emotional eating triggers. ' : ''}${uniqueNewFoods.length >= 3 ? 'Positive expansion in food variety suggests reduced food anxiety. ' : ''}${consecutiveLogs > 0 ? 'Consistent food logging indicates good program engagement.' : ''}
+                    Clinical Impressions
+                    Client demonstrates ${reviewThemes.emotionalPatterns.length > 0 ? 'increasing awareness of emotional eating triggers. ' : ''}${uniqueNewFoods.length >= 3 ? 'Positive expansion in food variety suggests reduced food anxiety. ' : ''}${consecutiveLogs > 0 ? 'Consistent food logging indicates good program engagement.' : ''}
 
-Recommendations for Clinical Team
-${reviewThemes.emotionalPatterns.length > 0 ? 'Consider: Exploring stress coping strategies beyond food\n' : ''}${reviewThemes.breakthroughMoments.length > 0 ? 'Consider: Reinforcing success with food variety expansion\n' : ''}${fruitFreq < 1 ? 'Consider: Supporting gradual fruit intake increase' : 'Continue monitoring progress and support client goals'}`;
+                    Recommendations for Clinical Team
+                    ${reviewThemes.emotionalPatterns.length > 0 ? 'Consider: Exploring stress coping strategies beyond food\n' : ''}${reviewThemes.breakthroughMoments.length > 0 ? 'Consider: Reinforcing success with food variety expansion\n' : ''}${fruitFreq < 1 ? 'Consider: Supporting gradual fruit intake increase' : 'Continue monitoring progress and support client goals'}`;
             }
 
             await this.userModel.sequelize?.query(
-                `UPDATE public.user_summary SET start_date = :startDate AND end_date = :endDate WHERE user_id = :userId`,
+                `UPDATE public.user_summary SET start_date = :startDate, end_date = :endDate WHERE user_id = :userId`,
                 {
-                    type: QueryTypes.SELECT, raw: true,
+                    type: QueryTypes.UPDATE, raw: true,
                     replacements: { startDate, endDate, userId }
                 }
             )

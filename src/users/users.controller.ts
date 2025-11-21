@@ -183,7 +183,6 @@ export class UsersController {
         @UploadedFile() csvFile: Express.Multer.File,
         @Body() body: any
     ) {
-        console.log(csvFile, "---csvFile and body---");
         return this.usersService.importUsersFromCsv(csvFile, body);
     }
 

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Query, Post, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { PractitionerService } from './practitioner.service';
 import { FilterDto, IResponse } from 'src/users/dto/filter.dto';
 import { AuthGuard } from 'src/guards/authgaurd';

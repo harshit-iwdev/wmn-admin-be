@@ -312,9 +312,9 @@ export class PractitionerService {
                         console.log(`User ${email} created successfully`);
 
                         let metadataCreateQuery = `INSERT INTO public.metadata (user_id, first_name, last_name, user_type, pro_day, cycle, gift, updated_at) 
-                            VALUES (:userId, :first_name, :last_name, :user_type, :pro_day, :cycle, :gift, :updatedAt)`;
+                            VALUES (:userId, :first_name, :last_name, :user_type, :pro_day, :cycle, :gift, :updated_at) RETURNING *`;
                         const metadataCreate: any = await this.userModel?.sequelize?.query(metadataCreateQuery, {
-                            type: QueryTypes.INSERT,
+                            type: QueryTypes.SELECT,
                             raw: true,
                             replacements: {
                                 userId: newUser.data.id,
@@ -329,6 +329,12 @@ export class PractitionerService {
                         });
                         console.log(metadataCreate, "---metadataCreate---");
                         console.log(`Metadata for user ${email} created successfully`);
+                    }
+
+                    return {
+                        success: true,
+                        data: {},
+                        message: 'CSV data inserted successfully'
                     }
                 } catch (userError) {
                     console.error(`Failed to create user ${email}:`, userError.message);

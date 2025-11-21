@@ -1473,13 +1473,25 @@ export class UsersService {
 
     async createNewUser(userData: any): Promise<IResponse> {
         try {
-            const newUser = await this.userModel.create(userData);
+            const newUser: any = await this.userModel?.sequelize?.query(
+                `INSERT INTO auth.users (display_name, email, locale, created_at, updated_at) VALUES (:displayName, :email, 'en', :createdAt, :updatedAt) RETURNING *`,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: {
+                        displayName: userData.display_name ? userData.display_name : userData.firstName+userData.lastName,
+                        email: userData.email,
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                    }
+                }
+            );
 
             const displayName = userData.display_name ? userData.display_name : userData.firstName;
             const email = userData.email ? userData.email : userData.email;
             await this.sendRegistrationEmail(displayName, email);
 
-            return { success: true, data: newUser, message: 'User created successfully' };
+            return { success: true, data: newUser[0] || newUser, message: 'User created successfully' };
         } catch (error) {
             console.error(error, "---error---");
             throw new BadRequestException(error.message);
@@ -2696,22 +2708,30 @@ export class UsersService {
                     if (newUser.success) {
                         console.log(`User ${email} created successfully`);
 
-                        // let metadataCreateQuery = `INSERT INTO public.metadata (user_id, first_name, last_name, user_type, pro_day, cycle, gift, updated_at) 
-                        //     VALUES (:userId, :first_name, :last_name, :user_type, :pro_day, :cycle, :gift, :updatedAt)`;
-                        // const metadataCreate: any = await this.userModel?.sequelize?.query(metadataCreateQuery, {
-                        //     type: QueryTypes.INSERT,
-                        //     raw: true,
-                        //     replacements: {
-                        //         userId: newUser.data.id,
-                        //         first_name: element.firstName,
-                        //         last_name: element.lastName,
-                        //         user_type: body.userType,
-                        //         pro_day: 0,
-                        //         cycle: 0,
-                        //         gift: body.isGift === 'true' ? true : false,
-                        //         updated_at: new Date()
-                        //     }
-                        // });
+                        let metadataCreateQuery = `INSERT INTO public.metadata (user_id, first_name, last_name, user_type, pro_day, cycle, gift, updated_at) 
+                            VALUES (:userId, :first_name, :last_name, :user_type, :pro_day, :cycle, :gift, :updated_at) RETURNING *`;
+                        const metadataCreate: any = await this.userModel?.sequelize?.query(metadataCreateQuery, {
+                            type: QueryTypes.SELECT,
+                            raw: true,
+                            replacements: {
+                                userId: newUser.data.id,
+                                first_name: element.firstName,
+                                last_name: element.lastName,
+                                user_type: body.userType,
+                                pro_day: 0,
+                                cycle: 0,
+                                gift: body.isGift === 'true' ? true : false,
+                                updated_at: new Date()
+                            }
+                        });
+
+                        console.log(metadataCreate[0] || metadataCreate, "---metadataCreate---");
+                    }
+
+                    return {
+                        success: true,
+                        data: {},
+                        message: 'CSV data inserted successfully'
                     }
                 } catch (userError) {
                     console.error(`Failed to create user ${email}:`, userError.message);

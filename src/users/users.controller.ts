@@ -205,4 +205,11 @@ export class UsersController {
         return this.usersService.generateUserSummary(userId);
     }
 
+    @Post('/rev-cat-webhook')
+    async revCatWebhookController(
+        @Body() body: any
+    ) {
+        return this.usersService.revCatWebhook(body);
+    }
+
 }

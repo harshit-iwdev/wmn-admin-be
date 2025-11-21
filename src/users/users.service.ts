@@ -3429,4 +3429,64 @@ export class UsersService {
         }
     }
 
+    // Utility function to derive subscription status
+    async deriveStatus(event) {
+        const type = event.type;
+        const periodType = event.period_type;        // "TRIAL" or "NORMAL"
+        const expiresAt = event.expiration_at_ms ? new Date(event.expiration_at_ms) : null;
+        
+        const isActive = expiresAt && expiresAt > new Date();
+        const isTrial = periodType === "TRIAL";
+        const willRenew = event.is_auto_renew_enabled === true;
+    
+        // ----- Status Mapping -----
+        if (type === "TRIAL_STARTED" && isActive) {
+            return "TRIAL";
+        }
+    
+        if ((type === "TRIAL_CANCELLED" || type === "CANCELLATION") && isTrial && isActive) {
+            return "CANCELLED_TRIAL";
+        }
+    
+        if (["INITIAL_PURCHASE", "RENEWAL", "TRIAL_CONVERTED"].includes(type) && willRenew && isActive) {
+            return "ACTIVE";
+        }
+    
+        if (type === "CANCELLATION" && isActive) {
+            return "CANCELLED";
+        }
+    
+        if (type === "EXPIRATION" && !isActive) {
+            return "EXPIRED";
+        }
+    
+        return "UNKNOWN";
+    }
+
+    async revCatWebhook(body: any): Promise<any> {
+        try {
+            let userId = '';
+            if (body.event.original_app_user_id.included('$RCAnonymousID:')) {
+                userId = body.event.original_app_user_id.split('$RCAnonymousID:')[1];
+            } else {
+                userId = body.event.original_app_user_id;
+            }
+
+            const revCatStatus = await this.deriveStatus(body.event);
+
+            let metadataCreateQuery = `UPDATE public.metadata set "revCatStatus" = :revCatStatus where "user_id" = :userId`;
+            const metadataCreate: any = await this.userModel?.sequelize?.query(metadataCreateQuery, {
+                type: QueryTypes.UPDATE,
+                raw: true,
+                replacements: {
+                    userId: userId,
+                    revCatStatus: revCatStatus
+                }
+            });
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
 }

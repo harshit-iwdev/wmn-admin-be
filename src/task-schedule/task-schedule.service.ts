@@ -219,6 +219,36 @@ export class TaskScheduleService {
         }
     }
 
+    // async revCatApiCallService(userId: string) {
+    //     try {
+    //         // RevCat API
+    //         const revCatData = await axios.get(`${process.env.REV_CAT_BASE_URL}/v2/projects/${process.env.REV_CAT_PROJECT_KEY}/customers/${userId}/subscriptions`, {
+    //             headers: {
+    //                 'Authorization': `Bearer ${process.env.REV_CAT_KEY_V2}`,
+    //                 'Content-Type': 'application/json',
+    //             },
+    //         });
+    //         console.log(revCatData, "---revCatData---231");
+
+    //         return revCatData.data.items[0];
+    //         if (revCatData.data.items && revCatData.data.items.length > 0) {
+    //             // let metadataCreateQuery = `UPDATE public.metadata set "revCatStatus" = :revCatStatus where "user_id" = :userId`;
+    //             // const metadataCreate: any = await this.userModel?.sequelize?.query(metadataCreateQuery, {
+    //             //     type: QueryTypes.INSERT,
+    //             //     raw: true,
+    //             //     replacements: {
+    //             //         userId: userId,
+    //             //         revCatStatus: revCatData.data.items[0].status
+    //             //     }
+    //             // });
+    //         }
+    //         return "revCatApiCallService done successfully";
+    //     }
+    //     catch (error) {
+    //         console.error(error, "---error---192");
+    //         return "error in revCatApiCallService";
+    //     }
+    // }
 
 
 }

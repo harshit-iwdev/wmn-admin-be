@@ -1,4 +1,4 @@
-import { Controller, Get, Injectable, Logger } from '@nestjs/common';
+import { Controller, Get, Injectable, Logger, Param } from '@nestjs/common';
 import { Cron, Interval } from '@nestjs/schedule';
 import { TaskScheduleService } from './task-schedule.service';
 
@@ -32,5 +32,12 @@ export class TaskScheduleController {
         console.log('---invoked scheduler for updating all user status---');
         return this.taskScheduleService.updateAllUserStatusService();
     }
+
+    // @Get('rev-cat-api-check/:userId')
+    // revCatApiCheckController(
+    //     @Param('userId') userId: string
+    // ) {
+    //     return this.taskScheduleService.revCatApiCallService(userId);
+    // }
 
 }

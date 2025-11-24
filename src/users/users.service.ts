@@ -5,7 +5,7 @@ import { QueryTypes } from 'sequelize';
 import { FilterDto, FoodLogsFilterDto, IResponse } from './dto/filter.dto';
 import { Resend } from 'resend';
 import * as XLSX from 'xlsx';
-import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 
 @Injectable()
 export class UsersService {
@@ -1310,7 +1310,7 @@ export class UsersService {
         }
     }
 
-    async createNewUser(userData: any): Promise<IResponse> {
+    async createNewUser(userData: any, senderName: string): Promise<IResponse> {
         try {
             const newUser: any = await this.userModel?.sequelize?.query(
                 `INSERT INTO auth.users (display_name, email, locale, created_at, updated_at) VALUES (:displayName, :email, 'en', :createdAt, :updatedAt) RETURNING *`,
@@ -1328,7 +1328,7 @@ export class UsersService {
 
             const displayName = userData.display_name ? userData.display_name : userData.firstName;
             const email = userData.email ? userData.email : userData.email;
-            await this.sendRegistrationEmail(displayName, email);
+            await this.sendRegistrationEmail(displayName, email, senderName);
 
             return { success: true, data: newUser[0] || newUser, message: 'User created successfully' };
         } catch (error) {
@@ -1337,23 +1337,29 @@ export class UsersService {
         }
     }
 
-    async sendRegistrationEmail(displayName: string, email: string): Promise<any> {
+    async sendRegistrationEmail(displayName: string, email: string, senderName: string): Promise<any> {
         try {
+            let emailBody = `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <h2 style="color: #6b46c1;">Welcome to Wise Mind Nutrition!</h2>
+                  <p>Hello ${displayName},</p>
+                  <p>You have been invited to join Wise Mind Nutrition #SenderName#</p>
+                  <p>You can now sign up through the mobile app using your email address: <strong>${email}</strong></p>
+                  <p>Get Android app from <a href="https://play.google.com/store/apps/details?id=com.wisemindnutrition.app">Google Play</a></p>
+                  <p>Get iOS app from <a href="https://apps.apple.com/us/app/wise-mind-nutrition/id1671517202">Apple App Store</a></p>
+                  <p>If you have any questions, please contact support@wisemindnutrition.com</p>
+                  <p>Thank you for being here,<br>The Wise Mind Nutrition Team</p>
+                </div>`;
+
+            if (senderName && senderName.length > 0 && senderName !== 'undefined') {
+            emailBody = emailBody.replace('#SenderName#', ` by ${senderName}`);
+            } else {
+            emailBody = emailBody.replace('#SenderName#', '.');
+            }
+
             await this.sendEmail({
                 to: email,
                 subject: 'Welcome to Wise Mind Nutrition - Invitation',
-                html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                  <h2 style="color: #6b46c1;">Welcome to Wise Mind Nutrition!</h2>
-                  <p>Hello ${displayName},</p>
-                  <p>You have been invited to join Wise Mind Nutrition by your practitioner.</p>
-                  <p>You can now sign up through the mobile app using your email address: <strong>${email}</strong></p>
-                  <p>Get Android app from <a href="https://play.google.com/store/apps/details?id=com.wisemindnutrition.app">Google Play</a></p>
-                  <p>Get iOS app from <a href="https://apps.apple.com/us/app/wisemindnutrition/id6749000000">Apple App Store</a></p>
-                  <p>If you have any questions, please contact your practitioner.</p>
-                  <p>Best regards,<br>The Wise Mind Nutrition Team</p>
-                </div>
-              `
+                html: emailBody
             })
         } catch (emailError: any) {
             console.error('Email sending error:', emailError)
@@ -1367,18 +1373,15 @@ export class UsersService {
             await this.sendEmail({
                 to: email,
                 subject: 'Practitioner Login Notification',
-                html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                  <h2 style="color: #6b46c1;">Welcome to Wise Mind Nutrition!</h2>
-                  <p>Hello ${practitionerName},</p>
-                  <p>Log in to your account as practitioner to view the user's details.</p>
-                  <p>Click the button below to log in:</p>
-                  <a href="${process.env.NEXT_PUBLIC_FE_DOMAIN}/practitioners/login?timestamp=${timestamp}&email=${email}">
-                    <button style="background-color: #6b46c1; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; cursor: pointer;">Login</button>
-                  </a>
-                  <p>Best regards,<br>The Wise Mind Nutrition Team</p>
-                </div>
-              `,
+                html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2 style="color: #6b46c1;">Welcome to Wise Mind Nutrition!</h2>
+                    <p>Hello ${practitionerName},</p>
+                    <p>You can access the backend of your practitioner account to view your connections and analytics.</p>
+                    <a href="${process.env.NEXT_PUBLIC_FE_DOMAIN}/practitioners/login?timestamp=${timestamp}&email=${email}">
+                        <button style="background-color: #6b46c1; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; cursor: pointer;">Login</button>
+                    </a>
+                    <p>Here to support you,<br>Dr. Wiss & The Wise Mind Nutrition Team</p>
+                </div>`,
             });
         } catch (error) {
             console.error(error, 'Email sending error');
@@ -2447,7 +2450,7 @@ export class UsersService {
         }
     }
 
-    async importUsersFromCsv(file: Express.Multer.File, body: any): Promise<any> {
+    async importUsersFromCsv(file: Express.Multer.File, body: any, user: any): Promise<any> {
         try {
             // ✅ Step 1: Validate file
             if (!file) {
@@ -2489,6 +2492,17 @@ export class UsersService {
             // ✅ Step 6: Log parsed content
             console.log('✅ Parsed Spreadsheet Data:', JSON.stringify(data, null, 2));
 
+            const senderNameData: any = await this.userModel.sequelize?.query(
+                `SELECT display_name FROM auth.users WHERE id = :userId`,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { userId: user.id }
+                }
+            );
+
+            const senderName = senderNameData[0]?.display_name || '';
+
             for (let i = 0; i < data.length; i++) {
                 const element: any = data[i];
 
@@ -2516,7 +2530,7 @@ export class UsersService {
                 console.log(`User ${email} does not exist, creating new user`);
 
                 try {
-                    const newUser = await this.createNewUser(element);
+                    const newUser = await this.createNewUser(element, senderName);
                     console.log(newUser, "---newUser---");
                     if (newUser.success) {
                         console.log(`User ${email} created successfully`);
@@ -2974,7 +2988,7 @@ export class UsersService {
                 aq.questions && aq.questions.some((q: any) => q.answer_id && q.values)
             ).length;
 
-            // Generate Clinical Summary using OpenAI
+            // Generate Clinical Summary using Anthropic
             const currentDate = new Date();
             const generatedDate = currentDate.toISOString().split('T')[0] + ' ' + 
                 currentDate.toTimeString().split(' ')[0].substring(0, 5);
@@ -2985,7 +2999,7 @@ export class UsersService {
             const periodStartStr = periodStart.toISOString().split('T')[0];
             const periodEndStr = currentDate.toISOString().split('T')[0];
 
-            // Prepare data summary for OpenAI
+            // Prepare data summary for Anthropic
             const dataSummary = {
                 programEngagement: {
                     currentModule: currentModule,
@@ -3134,40 +3148,40 @@ export class UsersService {
                 Consider: [specific recommendation 3]
 
                 Generate the summary now:`;
-                console.log(prompt, "---prompt---3296");
 
-                            // Initialize OpenAI client
-            const openai = new OpenAI({
-                apiKey: process.env.OPENAI_API_KEY,
+            // Initialize Anthropic client
+            const anthropic = new Anthropic({
+                apiKey: process.env.ANTHROPIC_SECRET_KEY,
             });
             let clinicalSummary = '';
             try {
-                // Call OpenAI API
-                const completion = await openai.chat.completions.create({
-                    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+            // Call Anthropic API
+            // Suggested models (Nov 2025): claude-sonnet-4-5-20250929, claude-opus-4-1-20250805, claude-3-5-haiku-20241022
+                const message = await anthropic.messages.create({
+                model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929',
+                    max_tokens: 2000,
+                    temperature: 0.7,
+                    system: 'You are a clinical nutritionist writing professional clinical summaries for functional medicine practitioners and therapists. Your summaries are objective, evidence-based, and focus on patterns and observations rather than diagnoses.',
                     messages: [
-                        {
-                            role: 'system',
-                            content: 'You are a clinical nutritionist writing professional clinical summaries for functional medicine practitioners and therapists. Your summaries are objective, evidence-based, and focus on patterns and observations rather than diagnoses.'
-                        },
                         {
                             role: 'user',
                             content: prompt
                         }
                     ],
-                    temperature: 0.7,
-                    max_tokens: 2000,
                 });
 
-                clinicalSummary = completion.choices[0]?.message?.content || '';
+                clinicalSummary = message.content[0]?.type === 'text' ? message.content[0].text : '';
 
-                // If OpenAI fails, fall back to basic summary
+                // If Anthropic fails, fall back to basic summary
                 if (!clinicalSummary || clinicalSummary.trim().length === 0) {
-                    throw new Error('OpenAI returned empty response');
+                    throw new Error('Anthropic returned empty response');
                 }
-            } catch (openaiError: any) {
-                console.error('OpenAI error:', openaiError);
-                // Fallback to basic summary if OpenAI fails
+            } catch (anthropicError: any) {
+                console.error('Anthropic error:', anthropicError);
+                if (anthropicError?.status === 404) {
+                    console.error(`Model not found. Set ANTHROPIC_MODEL to one of: claude-sonnet-4-5-20250929, claude-opus-4-1-20250805, claude-3-5-haiku-20241022, claude-opus-4-20250514, claude-sonnet-4-20250514.`);
+                }
+                // Fallback to basic summary if Anthropic fails
                 clinicalSummary = `CLINICAL NUTRITION SUMMARY
                     Generated: ${generatedDate}
                     Period: ${periodStartStr} to ${periodEndStr}

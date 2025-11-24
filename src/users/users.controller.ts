@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { FilterDto, FoodLogsFilterDto, IResponse } from './dto/filter.dto';
 import { AuthGuard } from 'src/guards/authgaurd';
@@ -119,7 +119,7 @@ export class UsersController {
     @UseGuards(AuthGuard)
     @Post('/create-new-user')
     async createNewUser(@Body() userData: Partial<User>) {
-        return this.usersService.createNewUser(userData);
+        return this.usersService.createNewUser(userData, '');
     }
 
     @UseGuards(AuthGuard)
@@ -181,9 +181,10 @@ export class UsersController {
     @UseInterceptors(FileInterceptor('csvFile'))
     async importUsersFromCsv(
         @UploadedFile() csvFile: Express.Multer.File,
-        @Body() body: any
+        @Body() body: any,
+        @Req() req: any
     ) {
-        return this.usersService.importUsersFromCsv(csvFile, body);
+        return this.usersService.importUsersFromCsv(csvFile, body, req.user as any);
     }
 
     @UseGuards(AuthGuard)

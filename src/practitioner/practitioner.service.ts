@@ -150,7 +150,7 @@ export class PractitionerService {
     }
 
 
-    async importPractitionersFromCsv(file: Express.Multer.File, body: any): Promise<any> {
+    async importPractitionersFromCsv(file: Express.Multer.File, body: any, user: any): Promise<any> {
         try {
             // ✅ Step 1: Validate file
             if (!file) {
@@ -192,6 +192,16 @@ export class PractitionerService {
             // ✅ Step 6: Log parsed content
             console.log('✅ Parsed Spreadsheet Data:', JSON.stringify(data, null, 2));
 
+            const senderNameData: any = await this.userModel.sequelize?.query(
+                `SELECT display_name FROM auth.users WHERE id = :userId`,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { userId: user.id }
+                }
+            );
+            const senderName = senderNameData[0]?.display_name || '';
+
             for (let i = 0; i < data.length; i++) {
                 const element: any = data[i];
 
@@ -219,7 +229,7 @@ export class PractitionerService {
                 }
 
                 try {
-                    const newUser = await this.userService.createNewUser(element);
+                    const newUser = await this.userService.createNewUser(element, senderName);
                     if (newUser.success) {
                         console.log(`User ${email} created successfully`);
 

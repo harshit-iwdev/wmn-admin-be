@@ -1,4 +1,9 @@
 export const RESPONSE_MESSAGES = {
+  MFA_CODE_NOT_FOUND: 'MFA code not found',
+  INCORRECT_MFA_CODE: 'Incorrect MFA code',
+  MFA_CODE_EXPIRED: 'MFA code expired',
+  MFA_CODE_GENERATED: 'MFA code generated successfully',
+  LOGIN_FAILURE: 'Login failed, please try again',
   USER_CREATED: 'User created successfully',
   EMAIL_ALREADY_EXITS: 'Email already exists.',
   USER_NOT_FOUND: 'User not found.',

@@ -1,7 +1,7 @@
 import { InjectModel } from '@nestjs/sequelize';
 import { User } from '../models';
 import { BadRequestException, HttpStatus, NotFoundException, Req } from '@nestjs/common';
-import { PractitionerLoginDto, PractitionerLoginLinkVerificationDto, SigninDto } from './dto/signin';
+import { PractitionerLoginDto, PractitionerLoginLinkVerificationDto, SigninDto, VerifyMfaCodeDto } from './dto/signin';
 import * as bcrypt from 'bcrypt';
 import { RESPONSE_MESSAGES } from 'src/common/utils/responseMessages';
 import { ForgotPasswordDto } from './dto/forgotPassword';
@@ -76,6 +76,27 @@ export class AuthService {
   //   };
   // }
 
+  async generateMfaCode(payload: SigninDto) {
+    try {
+      const mfaCode = this.commonHelperService.generateRandomNumericValue();
+      await this.userModel?.sequelize?.query(
+        'UPDATE public.super_admin_mfa SET mfa_code = :mfaCode, mfa_expires_at = :mfaCodeExpiresAt WHERE email = :email',
+        {
+          replacements: { mfaCode, mfaCodeExpiresAt: new Date(Date.now() + 10 * 60 * 1000), email: payload.email },
+          type: QueryTypes.UPDATE,
+          raw: true,
+        }
+      );
+      return { setMfa: true, mfaCode };
+    } catch (error) {
+      console.error(error, "---error---");
+      return {
+        setMfa: false,
+        message: error.message,
+      };
+    }
+  }
+
   async signin(payload: SigninDto) {
     try {
       const { email, password } = payload;
@@ -105,15 +126,76 @@ export class AuthService {
         throw new BadRequestException(RESPONSE_MESSAGES.INCORRECT_PASSWORD);
       }
 
+      const mfaData = await this.generateMfaCode(payload);
+
+      if (!mfaData.setMfa) {
+        throw new BadRequestException(RESPONSE_MESSAGES.LOGIN_FAILURE);
+      }
+
+      await this.usersService.sendMfaCodeEmail(email as string, mfaData.mfaCode as string);
+
+      return {
+        statusCode: HttpStatus.OK,
+        message: RESPONSE_MESSAGES.MFA_CODE_GENERATED,
+        success: true,
+        data: {
+          setMfa: true,
+        },
+      }
+    } catch (error) {
+      console.error(error, "---error---");
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  async verifyMfaCode(payload: VerifyMfaCodeDto) {
+    try {
+      const { email, mfaCode } = payload;
+      const existingMfaData: any = await this.userModel?.sequelize?.query(
+        'SELECT mfa_code, mfa_expires_at FROM public.super_admin_mfa WHERE email = :email',
+        {
+          replacements: { email },
+          type: QueryTypes.SELECT, // ✅ Use imported QueryTypes
+          raw: true,
+        }
+      );
+      if (!existingMfaData) {
+        throw new NotFoundException(RESPONSE_MESSAGES.MFA_CODE_NOT_FOUND);
+      }
+      if (existingMfaData[0].mfa_code !== mfaCode) {
+        throw new BadRequestException(RESPONSE_MESSAGES.INCORRECT_MFA_CODE);
+      }
+      if (existingMfaData[0].mfa_expires_at < new Date()) {
+        throw new BadRequestException(RESPONSE_MESSAGES.MFA_CODE_EXPIRED);
+      }
+      await this.userModel?.sequelize?.query(
+        `UPDATE public.super_admin_mfa SET mfa_code = '-1-1-1', mfa_expires_at = :mfaTime WHERE email = :email`,
+        {
+          replacements: { email, mfaTime: new Date() },
+          type: QueryTypes.UPDATE,
+          raw: true,
+        }
+      );
+
+      const users = await this.userModel?.sequelize?.query(
+        'SELECT * FROM auth.users WHERE email = :email',
+        {
+          replacements: { email },
+          type: QueryTypes.SELECT, // ✅ Use imported QueryTypes
+          raw: true,
+        }
+      );
+      const existingUser: any = users && users[0] ? users[0] : null;
+
       const jwtPayload = {
         id: existingUser.id as string,
         email: existingUser.email,
       };
-  
+
       const { access_token, refresh_token } = this.commonHelperService.generateJwtToken(jwtPayload);
-  
+
       existingUser['refresh_token'] = refresh_token;
-  
+
       return {
         statusCode: HttpStatus.OK,
         success: true,

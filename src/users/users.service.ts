@@ -1367,6 +1367,26 @@ export class UsersService {
         }
     }
 
+    async sendMfaCodeEmail(email: string, mfaCode: string): Promise<any> {
+        try {
+            let emailBody = `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <h2 style="color: #6b46c1;">Welcome to Wise Mind Nutrition!</h2>
+                  <p>Hello Admin,</p>
+                  <p>Your MFA code is: <strong>${mfaCode}</strong></p>
+                  <p>This code will expire in 10 minutes.</p>
+                  <p>Thank you for being here,<br>The Wise Mind Nutrition Team</p>
+                </div>`;
+            await this.sendEmail({
+                to: email,
+                subject: 'Wise Mind Nutrition - MFA Code',
+                html: emailBody
+            })
+        } catch (emailError: any) {
+            console.error('Email sending error:', emailError)
+            throw new BadRequestException(emailError.message || emailError);
+        }
+    }
+
     async sendPractitionerLoginEmail(practitionerName: string, email: string): Promise<any> {
         try {
             const timestamp = new Date().getTime();

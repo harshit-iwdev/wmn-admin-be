@@ -14,6 +14,19 @@ export class SigninDto {
   password: string;
 }
 
+export class VerifyMfaCodeDto {
+  @IsEmail()
+  @IsNotEmpty()
+  // @ApiProperty()
+  email: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(6)
+  // @ApiProperty()
+  mfaCode: string;
+}
+
 export class PractitionerLoginDto {
   @IsEmail()
   @IsNotEmpty()

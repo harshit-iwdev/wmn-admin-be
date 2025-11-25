@@ -1318,7 +1318,7 @@ export class UsersService {
                     type: QueryTypes.SELECT,
                     raw: true,
                     replacements: {
-                        displayName: userData.display_name ? userData.display_name : userData.firstName+userData.lastName,
+                        displayName: userData.display_name ? userData.display_name : userData.firstName + userData.lastName,
                         email: userData.email,
                         createdAt: new Date(),
                         updatedAt: new Date(),
@@ -1351,9 +1351,9 @@ export class UsersService {
                 </div>`;
 
             if (senderName && senderName.length > 0 && senderName !== 'undefined') {
-            emailBody = emailBody.replace('#SenderName#', ` by ${senderName}`);
+                emailBody = emailBody.replace('#SenderName#', ` by ${senderName}`);
             } else {
-            emailBody = emailBody.replace('#SenderName#', '.');
+                emailBody = emailBody.replace('#SenderName#', '.');
             }
 
             await this.sendEmail({
@@ -2874,10 +2874,10 @@ export class UsersService {
             const prevUserSummary: any = await this.userModel.sequelize?.query(
                 `SELECT * FROM public.user_summary WHERE "user_id" = :userId
                     ORDER BY end_date DESC LIMIT 1`, {
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                    replacements: { userId: userId }
-                }
+                type: QueryTypes.SELECT,
+                raw: true,
+                replacements: { userId: userId }
+            }
             )
 
             let startDate = '';
@@ -2885,15 +2885,15 @@ export class UsersService {
             if (prevUserSummary.length == 0) {
                 const userResp: any = await this.userModel.sequelize?.query(
                     `SELECT * FROM auth.users WHERE "id" = :userId`, {
-                        type: QueryTypes.SELECT,
-                        raw: true,
-                        replacements: { userId: userId }
-                    }
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: { userId: userId }
+                }
                 )
                 startDate = userResp[0].created_at;
                 endDate = new Date().toISOString();
             } else {
-                let tempEndDate : any = new Date(prevUserSummary[0]?.end_date);
+                let tempEndDate: any = new Date(prevUserSummary[0]?.end_date);
                 tempEndDate.setDate(tempEndDate.getDate() + 1);
                 startDate = await this.formatDateUTC(tempEndDate);
                 endDate = await this.formatDateUTC(new Date());
@@ -3004,13 +3004,13 @@ export class UsersService {
             const pinnedGems = workbookData?.pinnedGems || [];
             const gemsCount = Array.isArray(pinnedGems) ? pinnedGems.length : (pinnedGems?.gems?.length || 0);
             const assignmentQuestions = workbookData?.assignmentQuestionsData || [];
-            const completedAssignments = assignmentQuestions.filter((aq: any) => 
+            const completedAssignments = assignmentQuestions.filter((aq: any) =>
                 aq.questions && aq.questions.some((q: any) => q.answer_id && q.values)
             ).length;
 
             // Generate Clinical Summary using Anthropic
             const currentDate = new Date();
-            const generatedDate = currentDate.toISOString().split('T')[0] + ' ' + 
+            const generatedDate = currentDate.toISOString().split('T')[0] + ' ' +
                 currentDate.toTimeString().split(' ')[0].substring(0, 5);
 
             // Calculate period (last 30 days or since program start)
@@ -3175,19 +3175,17 @@ export class UsersService {
             });
             let clinicalSummary = '';
             try {
-            // Call Anthropic API
-            // Suggested models (Nov 2025): claude-sonnet-4-5-20250929, claude-opus-4-1-20250805, claude-3-5-haiku-20241022
+                // Call Anthropic API
+                // Suggested models (Nov 2025): claude-sonnet-4-5-20250929, claude-opus-4-1-20250805, claude-3-5-haiku-20241022
                 const message = await anthropic.messages.create({
-                model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929',
+                    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929',
                     max_tokens: 2000,
                     temperature: 0.7,
                     system: 'You are a clinical nutritionist writing professional clinical summaries for functional medicine practitioners and therapists. Your summaries are objective, evidence-based, and focus on patterns and observations rather than diagnoses.',
-                    messages: [
-                        {
-                            role: 'user',
-                            content: prompt
-                        }
-                    ],
+                    messages: [{
+                        role: 'user',
+                        content: prompt
+                    }],
                 });
 
                 clinicalSummary = message.content[0]?.type === 'text' ? message.content[0].text : '';
@@ -3245,8 +3243,8 @@ export class UsersService {
                         periodStart: periodStartStr,
                         periodEnd: periodEndStr,
                         userId: userId,
-                        userName: userData?.metadata?.first_name && userData?.metadata?.last_name 
-                            ? `${userData.metadata.first_name} ${userData.metadata.last_name}` 
+                        userName: userData?.metadata?.first_name && userData?.metadata?.last_name
+                            ? `${userData.metadata.first_name} ${userData.metadata.last_name}`
                             : userData?.user?.email || 'Unknown',
                         userEmail: userData?.user?.email || ''
                     },
@@ -3300,32 +3298,32 @@ export class UsersService {
         const type = event.type;
         const periodType = event.period_type;        // "TRIAL" or "NORMAL"
         const expiresAt = event.expiration_at_ms ? new Date(event.expiration_at_ms) : null;
-        
+
         const isActive = expiresAt && expiresAt > new Date();
         const isTrial = periodType === "TRIAL";
         const willRenew = event.is_auto_renew_enabled === true;
-    
+
         // ----- Status Mapping -----
         if (type === "TRIAL_STARTED" && isActive) {
             return "TRIAL";
         }
-    
+
         if ((type === "TRIAL_CANCELLED" || type === "CANCELLATION") && isTrial && isActive) {
             return "CANCELLED_TRIAL";
         }
-    
+
         if (["INITIAL_PURCHASE", "RENEWAL", "TRIAL_CONVERTED"].includes(type) && willRenew && isActive) {
             return "ACTIVE";
         }
-    
+
         if (type === "CANCELLATION" && isActive) {
             return "CANCELLED";
         }
-    
+
         if (type === "EXPIRATION" && !isActive) {
             return "EXPIRED";
         }
-    
+
         return "UNKNOWN";
     }
 

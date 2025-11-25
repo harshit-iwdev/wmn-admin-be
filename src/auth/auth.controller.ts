@@ -9,48 +9,55 @@ import { Public } from 'src/guards/authgaurd';
 
 
 @Controller('auth')
-// @ApiConflictResponse()
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
   @Post('sign-in')
-  async signIn(@Body() payload: SigninDto) {
+  async signIn(
+    @Body() payload: SigninDto
+  ) {
     return await this.authService.signin(payload);
   }
 
   @Public()
   @Post('verify-mfa-code')
-  async verifyMfaCode(@Body() payload: VerifyMfaCodeDto) {
+  async verifyMfaCode(
+    @Body() payload: VerifyMfaCodeDto
+  ) {
     return await this.authService.verifyMfaCode(payload);
   }
 
   @Public()
   @Post('practitioner-login')
-  async practitionerLogin(@Body() payload: PractitionerLoginDto) {
+  async practitionerLogin(
+    @Body() payload: PractitionerLoginDto
+  ) {
     return await this.authService.practitionerSignIn(payload);
   }
 
   @Public()
   @Post('practitioner-login-verification')
-  async practitionerLoginVerification(@Body() payload: PractitionerLoginLinkVerificationDto) {
+  async practitionerLoginVerification(
+    @Body() payload: PractitionerLoginLinkVerificationDto
+  ) {
     return await this.authService.practitionerLoginVerification(payload);
   }
 
-  // @Post('forgot-password')
-  // async forgotPassword(@Body() payload: ForgotPasswordDto) {
-  //   return await this.authService.forgotPassword(payload);
-  // }
-
   @Post('verify-otp')
-  async verifyOtp(@Body() payload: VerifyOtpDto) {
+  async verifyOtp(
+    @Body() payload: VerifyOtpDto
+  ) {
     return await this.authService.verifyOtp(payload);
   }
 
   @UseGuards(AuthGuard)
   @Post('reset-password')
-  // @ApiBearerAuth()
-  async resetPassword(@Req() req: Request, @Body() body: ResetPasswordDto) {
+  async resetPassword(
+    @Req() req: Request,
+    @Body() body: ResetPasswordDto
+  ) {
     return await this.authService.resetPassword(req, body);
   }
+
 }

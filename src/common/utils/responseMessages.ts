@@ -1,4 +1,5 @@
 export const RESPONSE_MESSAGES = {
+  PASSWORD_RESET_FAILED: 'Password reset failed',
   MFA_CODE_NOT_FOUND: 'MFA code not found',
   INCORRECT_MFA_CODE: 'Incorrect MFA code',
   MFA_CODE_EXPIRED: 'MFA code expired',

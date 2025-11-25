@@ -4,7 +4,6 @@ import { BadRequestException, HttpStatus, NotFoundException, Req } from '@nestjs
 import { PractitionerLoginDto, PractitionerLoginLinkVerificationDto, SigninDto, VerifyMfaCodeDto } from './dto/signin';
 import * as bcrypt from 'bcrypt';
 import { RESPONSE_MESSAGES } from 'src/common/utils/responseMessages';
-import { ForgotPasswordDto } from './dto/forgotPassword';
 import { VerifyOtpDto } from './dto/verifyOtp';
 import { ResetPasswordDto } from './dto/resetPassword';
 import { Request } from 'express';
@@ -20,67 +19,11 @@ export class AuthService {
     private commonHelperService: CommonHelperService
   ) {}
 
-  // async signup(payload: SignupDto) {
-  //   const { email, firstName, lastName, password } = payload;
-
-  //   // Check if the user already exists
-  //   const existingUser = await this.userModel.findOne({ email });
-  //   if (existingUser?.isVerified) {
-  //     throw new UnprocessableEntityException(
-  //       RESPONSE_MESSAGES.EMAIL_ALREADY_EXITS,
-  //     );
-  //   }
-  //   const otp = this.commonHelperService.generateRandomNumericValue();
-  //   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); //10 mins validity
-
-  //   if (existingUser) {
-  //     await this.userModel.updateOne(
-  //       { email },
-  //       { $set: { firstName, lastName, password, otp, otpExpiry } },
-  //     );
-  //   } else {
-  //     const user = new this.userModel({
-  //       firstName,
-  //       lastName,
-  //       password,
-  //       email,
-  //       otp,
-  //       otpExpiry,
-  //     });
-  //     await user.save();
-  //   }
-
-  //   const properties = {
-  //     otp,
-  //     fullName: `${firstName} ${lastName}`,
-  //   };
-
-  //   const profile = {
-  //     email,
-  //     first_name: firstName,
-  //     last_name: lastName,
-  //   };
-
-  //   await this.commonHelperService.sendKlaviyoEvent(
-  //     'new_account_created',
-  //     properties,
-  //     profile,
-  //   );
-
-  //   // Return the response
-  //   return {
-  //     statusCode: HttpStatus.CREATED,
-  //     message: RESPONSE_MESSAGES.OTP_SENT,
-  //     otpSent: true,
-  //     screen: 'verify-otp-email',
-  //   };
-  // }
-
   async generateMfaCode(payload: SigninDto) {
     try {
       const mfaCode = this.commonHelperService.generateRandomNumericValue();
-      await this.userModel?.sequelize?.query(
-        'UPDATE public.super_admin_mfa SET mfa_code = :mfaCode, mfa_expires_at = :mfaCodeExpiresAt WHERE email = :email',
+      await this.userModel?.sequelize?.query(`UPDATE public.super_admin_mfa SET mfa_code = :mfaCode,
+        mfa_expires_at = :mfaCodeExpiresAt WHERE email = :email`,
         {
           replacements: { mfaCode, mfaCodeExpiresAt: new Date(Date.now() + 10 * 60 * 1000), email: payload.email },
           type: QueryTypes.UPDATE,
@@ -100,11 +43,10 @@ export class AuthService {
   async signin(payload: SigninDto) {
     try {
       const { email, password } = payload;
-      const users = await this.userModel?.sequelize?.query(
-        'SELECT * FROM auth.users WHERE email = :email',
+      const users = await this.userModel?.sequelize?.query('SELECT * FROM auth.users WHERE email = :email',
         {
           replacements: { email },
-          type: QueryTypes.SELECT, // ✅ Use imported QueryTypes
+          type: QueryTypes.SELECT,
           raw: true,
         }
       );
@@ -138,9 +80,7 @@ export class AuthService {
         statusCode: HttpStatus.OK,
         message: RESPONSE_MESSAGES.MFA_CODE_GENERATED,
         success: true,
-        data: {
-          setMfa: true,
-        },
+        data: { setMfa: true },
       }
     } catch (error) {
       console.error(error, "---error---");
@@ -151,11 +91,11 @@ export class AuthService {
   async verifyMfaCode(payload: VerifyMfaCodeDto) {
     try {
       const { email, mfaCode } = payload;
-      const existingMfaData: any = await this.userModel?.sequelize?.query(
-        'SELECT mfa_code, mfa_expires_at FROM public.super_admin_mfa WHERE email = :email',
+      const existingMfaData: any = await this.userModel?.sequelize?.query(`SELECT mfa_code, mfa_expires_at 
+        FROM public.super_admin_mfa WHERE email = :email`,
         {
           replacements: { email },
-          type: QueryTypes.SELECT, // ✅ Use imported QueryTypes
+          type: QueryTypes.SELECT,
           raw: true,
         }
       );
@@ -168,8 +108,8 @@ export class AuthService {
       if (existingMfaData[0].mfa_expires_at < new Date()) {
         throw new BadRequestException(RESPONSE_MESSAGES.MFA_CODE_EXPIRED);
       }
-      await this.userModel?.sequelize?.query(
-        `UPDATE public.super_admin_mfa SET mfa_code = '-1-1-1', mfa_expires_at = :mfaTime WHERE email = :email`,
+      await this.userModel?.sequelize?.query(`UPDATE public.super_admin_mfa SET mfa_code = '-1-1-1',
+        mfa_expires_at = :mfaTime WHERE email = :email`,
         {
           replacements: { email, mfaTime: new Date() },
           type: QueryTypes.UPDATE,
@@ -177,11 +117,10 @@ export class AuthService {
         }
       );
 
-      const users = await this.userModel?.sequelize?.query(
-        'SELECT * FROM auth.users WHERE email = :email',
+      const users = await this.userModel?.sequelize?.query('SELECT * FROM auth.users WHERE email = :email',
         {
           replacements: { email },
-          type: QueryTypes.SELECT, // ✅ Use imported QueryTypes
+          type: QueryTypes.SELECT,
           raw: true,
         }
       );
@@ -214,13 +153,11 @@ export class AuthService {
   async practitionerSignIn(payload: PractitionerLoginDto) {
     try {
       const { email } = payload;
-      console.log(email, "---email---");
       const users = await this.userModel?.sequelize?.query(`SELECT U.*, M.user_type FROM auth.users AS U 
-        JOIN public.metadata AS M ON U.id = M.user_id 
-        WHERE U.email = :email AND M.user_type = 'practitioner'`,
+        JOIN public.metadata AS M ON U.id = M.user_id WHERE U.email = :email AND M.user_type = 'practitioner'`,
         {
           replacements: { email },
-          type: QueryTypes.SELECT, // ✅ Use imported QueryTypes
+          type: QueryTypes.SELECT,
           raw: true,
         }
       );
@@ -257,11 +194,10 @@ export class AuthService {
   async practitionerLoginVerification(payload: PractitionerLoginLinkVerificationDto) {
     const { email, timestamp } = payload;
     const existingUser: any = await this.userModel?.sequelize?.query(`SELECT U.*, M.user_type FROM auth.users AS U 
-      JOIN public.metadata AS M ON U.id = M.user_id 
-      WHERE U.email = :email AND M.user_type = 'practitioner'`,
+      JOIN public.metadata AS M ON U.id = M.user_id WHERE U.email = :email AND M.user_type = 'practitioner'`,
       {
         replacements: { email },
-        type: QueryTypes.SELECT, // ✅ Use imported QueryTypes
+        type: QueryTypes.SELECT,
         raw: true,
       }
     );
@@ -296,53 +232,6 @@ export class AuthService {
     };
   }
 
-  // async forgotPassword(payload: ForgotPasswordDto) {
-  //   const { email } = payload;
-  //   const existingUser = await this.userModel.findOne({ where: { email } });
-
-  //   if (!existingUser) {
-  //     throw new NotFoundException(RESPONSE_MESSAGES.USER_NOT_FOUND);
-  //   }
-
-  //   if (existingUser.email_verified === false) {
-  //     throw new BadRequestException(RESPONSE_MESSAGES.USER_NOT_VERIFIED);
-  //   }
-
-  //   const otp = this.commonHelperService.generateRandomNumericValue();
-  //   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); //10 mins validity
-
-  //   const properties = {
-  //     otp,
-  //     fullName: `${existingUser.display_name}`,
-  //   };
-
-  //   const profile = {
-  //     email,
-  //     first_name: existingUser.display_name,
-  //     last_name: existingUser.display_name,
-  //   };
-
-  //   await this.commonHelperService.sendKlaviyoEvent(
-  //     'reset_password',
-  //     properties,
-  //     profile,
-  //   );
-
-  //   await this.userModel.update(
-  //     {
-  //       otp_hash: otp,
-  //       otp_hash_expires_at: otpExpiry,
-  //       otp_method_last_used: 'email',
-  //     },
-  //     { where: { email } }
-  //   );
-
-  //   return {
-  //     statusCode: HttpStatus.OK,
-  //     message: RESPONSE_MESSAGES.OTP_SENT,
-  //   };
-  // }
-
   async verifyOtp(payload: VerifyOtpDto) {
     const { email, otp } = payload;
     const existingUser = await this.userModel.findOne({ where: { email } });
@@ -360,8 +249,7 @@ export class AuthService {
       email: existingUser.email,
     };
 
-    const { access_token } =
-      this.commonHelperService.generateJwtToken(jwtPayload);
+    const { access_token } = this.commonHelperService.generateJwtToken(jwtPayload);
 
     await this.userModel.update(
       {
@@ -382,30 +270,48 @@ export class AuthService {
   }
 
   async resetPassword(@Req() req: Request, body: ResetPasswordDto) {
-    const { password } = body;
-    const user = req['user'] as User;
+    try {
+      const { oldPassword, newPassword } = body;
+      const user = req['user'] as User;
 
-    const existingUser = await this.userModel.findOne({ where: { id: user.id } });
-    if (!existingUser) {
-      throw new NotFoundException(RESPONSE_MESSAGES.USER_NOT_FOUND);
+      const userData = await this.userModel.sequelize?.query(`SELECT * FROM auth.users WHERE id = :id`, {
+        replacements: { id: user.id },
+        type: QueryTypes.SELECT,
+        raw: true,
+      });
+      if (!userData || userData.length === 0) {
+        throw new NotFoundException(RESPONSE_MESSAGES.USER_NOT_FOUND);
+      }
+      const existingUser: any = userData[0];
+      // Check if the password contains the user's name or email
+      if (
+        newPassword.toLowerCase().includes(existingUser.email.toLowerCase()) ||
+        newPassword.toLowerCase().includes(existingUser.display_name.toLowerCase())
+      ) {
+        throw new BadRequestException(RESPONSE_MESSAGES.PASSWORD_CONTAINS_PERSONAL_INFO);
+      }
+
+      const isCorrectPassword = await bcrypt.compare(oldPassword, existingUser.password_hash);
+      if (!isCorrectPassword) {
+        throw new BadRequestException(RESPONSE_MESSAGES.INCORRECT_PASSWORD);
+      }
+
+      const new_password_hash = await bcrypt.hash(newPassword, 10);
+      const updatedUser = await this.userModel.sequelize?.query(`UPDATE auth.users SET password_hash = :passwordHash WHERE id = :id`, {
+        replacements: { passwordHash: new_password_hash, id: user.id },
+        type: QueryTypes.UPDATE,
+        raw: true,
+      });
+      if (!updatedUser) {
+        throw new BadRequestException(RESPONSE_MESSAGES.PASSWORD_RESET_FAILED);
+      }
+      return {
+        statusCode: HttpStatus.OK,
+        message: RESPONSE_MESSAGES.PASSWORD_RESET,
+      };
+    } catch (error) {
+      console.error(error, "---error---");
+      throw new BadRequestException(error.message);
     }
-
-    // Check if the password contains the user's name or email
-    if (
-      password.toLowerCase().includes(existingUser.email.toLowerCase()) ||
-      password.toLowerCase().includes(existingUser.display_name.toLowerCase())
-    ) {
-      throw new BadRequestException(
-        RESPONSE_MESSAGES.PASSWORD_CONTAINS_PERSONAL_INFO,
-      );
-    }
-
-    existingUser.password_hash = await bcrypt.hash(password, 10);
-    /* existingUser.markModified('password'); // Ensures the pre-save hook runs\ */
-    await existingUser.save();
-    return {
-      statusCode: HttpStatus.OK,
-      message: RESPONSE_MESSAGES.PASSWORD_RESET,
-    };
   }
 }

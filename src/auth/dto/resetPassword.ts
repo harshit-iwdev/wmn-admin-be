@@ -6,6 +6,11 @@ export class ResetPasswordDto {
   @IsNotEmpty()
   @MinLength(5)
   @MaxLength(15)
-  // @ApiProperty()
-  password: string;
+  oldPassword: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(5)
+  @MaxLength(15)
+  newPassword: string;
 }

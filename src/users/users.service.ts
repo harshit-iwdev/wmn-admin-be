@@ -822,6 +822,96 @@ export class UsersService {
         }
     }
 
+    async fetchUserAssessments(userId: string, startDate: string, endDate: string): Promise<IResponse> {
+        try {
+            // Format dates for SQL query
+            const tempStartDate = await this.formatDateLocal(startDate);
+            const tempEndDate = await this.formatDateLocal(endDate);
+
+            // Query to fetch assessment data (answers) with question details
+            let executeAssessmentQuery = `SELECT 
+                jsonb_build_object(
+                    'id', "A"."id",
+                    'question_slug', "A"."question_slug",
+                    'question_content', "Q"."content",
+                    'question_data', "Q"."data",
+                    'question_category', "Q"."category",
+                    'question_field_type', "Q"."field_type",
+                    'answer_value', "A"."values",
+                    'uid', "A"."uid",
+                    'user_id', "A"."user_id",
+                    'created_at', "A"."created_at",
+                    'updated_at', "A"."updated_at"
+                ) AS assessment
+                FROM public.answers AS "A"
+                LEFT JOIN public.questions AS "Q" ON "Q"."slug" = "A"."question_slug"
+                WHERE "A"."user_id" = :userId 
+                    AND Date("A"."created_at") >= :startDate 
+                    AND Date("A"."created_at") <= :endDate
+                ORDER BY "A"."created_at" DESC`;
+
+            const assessments: any = await this.userModel?.sequelize?.query(
+                executeAssessmentQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: {
+                        userId: userId,
+                        startDate: tempStartDate,
+                        endDate: tempEndDate
+                    }
+                }
+            );
+
+            // Count total assessments
+            let executeAssessmentCountQuery = `SELECT COUNT(*) as "count" 
+                FROM public.answers 
+                WHERE "user_id" = :userId 
+                    AND Date("created_at") >= :startDate 
+                    AND Date("created_at") <= :endDate`;
+
+            const assessmentCount: any = await this.userModel?.sequelize?.query(
+                executeAssessmentCountQuery,
+                {
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                    replacements: {
+                        userId: userId,
+                        startDate: tempStartDate,
+                        endDate: tempEndDate
+                    }
+                }
+            );
+
+            // Group assessments by uid (cycle) for better organization
+            const assessmentsByCycle: any = {};
+            assessments.forEach((item: any) => {
+                const uid = item.assessment?.uid || 'unknown';
+                if (!assessmentsByCycle[uid]) {
+                    assessmentsByCycle[uid] = [];
+                }
+                assessmentsByCycle[uid].push(item.assessment);
+            });
+
+            return {
+                success: true,
+                data: {
+                    assessments: assessments.map((item: any) => item.assessment),
+                    assessmentsByCycle: assessmentsByCycle,
+                    count: assessmentCount[0]?.count || 0,
+                    dateRange: {
+                        startDate: tempStartDate,
+                        endDate: tempEndDate
+                    }
+                },
+                message: 'User assessments fetched successfully'
+            };
+        } catch (error) {
+            console.error(error, "---error---");
+            throw new BadRequestException(error.message);
+        }
+    }
+
     async fetchUserWorkbook(id: string): Promise<any> {
         try {
             let workbookResponseData: any = {
@@ -3404,14 +3494,14 @@ export class UsersService {
             let reviewsDataResponse = await this.fetchUserFoodLogJournal(userId, { startDate, endDate });
             let workbookDataResponse = await this.fetchUserWorkbook(userId);
             // TODO: Add assessment data fetch - see developer notes
-            // let assessmentDataResponse = await this.fetchUserAssessments(userId, startDate, endDate);
+            let assessmentDataResponse = await this.fetchUserAssessments(userId, startDate, endDate);
     
             // Extract data from responses
             const userData = userDataResponse.data;
             const foodLogsData = foodLogsDataResponse.data;
             const reviewsData = reviewsDataResponse.data;
             const workbookData = workbookDataResponse.data;
-            // const assessmentData = assessmentDataResponse.data;
+            const assessmentData = assessmentDataResponse.data;
     
             // Get user creation date for days in program calculation
             const userCreatedAt = userData?.user?.created_at ? new Date(userData.user.created_at) : new Date();
@@ -3477,6 +3567,34 @@ export class UsersService {
                 aq.questions && aq.questions.some((q: any) => q.answer_id && q.values)
             ).length;
     
+            // Process Assessment Data
+            const assessments = assessmentData?.assessments || [];
+            const assessmentsByCycle = assessmentData?.assessmentsByCycle || {};
+            const assessmentCount = assessmentData?.count || 0;
+            
+            // Group assessments by category for better analysis
+            const assessmentsByCategory: any = {};
+            const recentAssessments = assessments.slice(0, 20).map((assessment: any) => {
+                const category = assessment?.question_category || 'uncategorized';
+                if (!assessmentsByCategory[category]) {
+                    assessmentsByCategory[category] = [];
+                }
+                assessmentsByCategory[category].push({
+                    question_slug: assessment?.question_slug,
+                    question_content: assessment?.question_content,
+                    answer_value: assessment?.answer_value,
+                    uid: assessment?.uid,
+                    created_at: assessment?.created_at
+                });
+                return {
+                    category: category,
+                    question: assessment?.question_content || assessment?.question_slug,
+                    answer: assessment?.answer_value,
+                    cycle: assessment?.uid,
+                    date: assessment?.created_at
+                };
+            });
+    
             // Generate Clinical Summary using Anthropic
             const currentDate = new Date();
             const generatedDate = currentDate.toISOString().split('T')[0] + ' ' + 
@@ -3517,6 +3635,15 @@ export class UsersService {
                 workbookProgress: {
                     gemsPinned: gemsCount,
                     assignmentsCompleted: completedAssignments
+                },
+                assessments: {
+                    totalCount: assessmentCount,
+                    recentAssessments: recentAssessments,
+                    assessmentsByCategory: Object.keys(assessmentsByCategory).map(category => ({
+                        category: category,
+                        count: assessmentsByCategory[category].length,
+                        sample: assessmentsByCategory[category].slice(0, 3)
+                    }))
                 }
             };
     
@@ -3582,6 +3709,7 @@ export class UsersService {
        - Intention-setting patterns and follow-through
        - Self-awareness demonstrated in nightly reviews
        - Engagement with workbook assignments and gems
+       - Self-reported progress from assessment responses
     
     3. Eating behavior patterns
        - Timing, frequency, and context of meals
@@ -3592,6 +3720,8 @@ export class UsersService {
        - Connect eating patterns to emotional themes from reviews
        - Link food logging consistency to program engagement
        - Note alignment (or gaps) between stated intentions and logged behaviors
+       - Correlate assessment responses with eating behaviors and review themes
+       - Identify patterns across assessment categories (symptoms, experiences, progress indicators)
     
     CLIENT DATA:
     
@@ -3641,6 +3771,27 @@ export class UsersService {
     
     ${JSON.stringify(sampleReviews, null, 2)}
     
+    ASSESSMENT DATA:
+    The following assessment responses were collected during this period. Use these to understand the client's self-reported experiences, symptoms, and progress indicators. Integrate assessment insights with eating behavior patterns and review themes.
+    
+    Total assessments completed: ${dataSummary.assessments.totalCount}
+    
+    Assessment Categories:
+    ${dataSummary.assessments.assessmentsByCategory.length > 0 ? dataSummary.assessments.assessmentsByCategory.map((cat: any) => `
+    - ${cat.category}: ${cat.count} responses
+      Sample: ${cat.sample.map((s: any) => `"${s.question_content || s.question_slug}": ${JSON.stringify(s.answer_value)}`).join('; ')}`).join('') : 'No assessment data available'}
+    
+    Recent Assessment Responses (last 20):
+    ${recentAssessments.length > 0 ? recentAssessments.map((a: any) => 
+        `- [${a.category}] ${a.question}: ${JSON.stringify(a.answer)} (Cycle: ${a.cycle || 'N/A'})`
+    ).join('\n    ') : 'No recent assessments'}
+    
+    Note: When analyzing assessments, look for:
+    - Patterns in self-reported symptoms or experiences
+    - Changes in responses over time (compare cycles if available)
+    - Alignment or discrepancies between assessment responses and eating behaviors
+    - Indicators of progress, challenges, or areas needing clinical attention
+    
     Generate a clinical summary in the following format:
     
     CLINICAL NUTRITION SUMMARY
@@ -3675,6 +3826,12 @@ export class UsersService {
     - Most recent: "[intention text]"
     - Achievement rate: [X]%
     - [What intention patterns reveal about client's therapeutic focus]
+    
+    Assessment Insights:
+    [If assessment data is available, include a brief analysis of key assessment responses and what they reveal about the client's self-reported experiences, symptoms, or progress. Connect assessment findings to eating behaviors and review themes when relevant.]
+    - Key assessment themes: [list 2-3 main themes from assessments]
+    - Notable changes: [any significant shifts in assessment responses]
+    - Integration with eating patterns: [how assessment responses relate to food logging and eating behaviors]
     
     Nightly Review Themes (from contextual analysis):
     - [Theme 1 with specific example from review content]

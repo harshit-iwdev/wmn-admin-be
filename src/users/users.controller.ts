@@ -85,7 +85,7 @@ export class UsersController {
         @Param('pageNumber') pageNumber: number,
         @Param('pageSize') pageSize: number
     ) {
-        return this.usersService.fetchUserFoodLogJournal(id, pageNumber, pageSize);
+        return this.usersService.fetchUserFoodLogJournal(id, { pageNumber, pageSize });
     }
 
     @UseGuards(AuthGuard)

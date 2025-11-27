@@ -1408,8 +1408,9 @@ export class UsersService {
         }
     }
 
-    async createNewUser(userData: any, senderName: string): Promise<IResponse> {
+    async createNewUser(userData: any, senderData: any): Promise<IResponse> {
         try {
+            console.log(senderData, "---senderData---1413")
             const newUser: any = await this.userModel?.sequelize?.query(
                 `INSERT INTO auth.users (display_name, email, locale, created_at, updated_at) VALUES (:displayName, :email, 'en', :createdAt, :updatedAt) RETURNING *`,
                 {
@@ -1426,7 +1427,7 @@ export class UsersService {
 
             const displayName = userData.display_name ? userData.display_name : userData.firstName;
             const email = userData.email ? userData.email : userData.email;
-            await this.sendRegistrationEmail(displayName, email, senderName);
+            await this.sendRegistrationEmail(displayName, email, senderData);
 
             return { success: true, data: newUser[0] || newUser, message: 'User created successfully' };
         } catch (error) {
@@ -1435,27 +1436,28 @@ export class UsersService {
         }
     }
 
-    async sendRegistrationEmail(displayName: string, email: string, senderName: string): Promise<any> {
+    async sendRegistrationEmail(displayName: string, invitedEmail: string, senderData: any): Promise<any> {
         try {
+            console.log(senderData, "---senderData---1440")
             let emailBody = `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                   <h2 style="color: #6b46c1;">Welcome to Wise Mind Nutrition!</h2>
                   <p>Hello ${displayName},</p>
                   <p>You have been invited to join Wise Mind Nutrition #SenderName#</p>
-                  <p>You can now sign up through the mobile app using your email address: <strong>${email}</strong></p>
+                  <p>You can now sign up through the mobile app using your email address: <strong>${invitedEmail}</strong></p>
                   <p>Get Android app from <a href="https://play.google.com/store/apps/details?id=com.wisemindnutrition.app">Google Play</a></p>
                   <p>Get iOS app from <a href="https://apps.apple.com/us/app/wise-mind-nutrition/id1671517202">Apple App Store</a></p>
                   <p>If you have any questions, please contact support@wisemindnutrition.com</p>
                   <p>Thank you for being here,<br>The Wise Mind Nutrition Team</p>
                 </div>`;
 
-            if (senderName && senderName.length > 0 && senderName !== 'undefined') {
-                emailBody = emailBody.replace('#SenderName#', ` by ${senderName}`);
+            if (senderData && senderData !== 'undefined') {
+                emailBody = emailBody.replace('#SenderName#', ` by ${senderData.email} with username ${senderData.username}`);
             } else {
-                emailBody = emailBody.replace('#SenderName#', '.');
+                emailBody = emailBody.replace('#SenderName#', '');
             }
 
             await this.sendEmail({
-                to: email,
+                to: invitedEmail,
                 subject: 'Welcome to Wise Mind Nutrition - Invitation',
                 html: emailBody
             })
@@ -2575,13 +2577,6 @@ export class UsersService {
                 throw new BadRequestException('No file provided');
             }
 
-            console.log('📄 Uploaded File:', {
-                name: file.originalname,
-                mimetype: file.mimetype,
-                size: file.size,
-            });
-            console.log('📩 Received Body:', JSON.stringify(body, null, 2));
-
             // ✅ Step 2: Read workbook from buffer
             const workbook = XLSX.read(file.buffer, { type: 'buffer' });
 
@@ -2607,19 +2602,16 @@ export class UsersService {
                 );
             }
 
-            // ✅ Step 6: Log parsed content
-            console.log('✅ Parsed Spreadsheet Data:', JSON.stringify(data, null, 2));
-
             const senderNameData: any = await this.userModel.sequelize?.query(
-                `SELECT display_name FROM auth.users WHERE id = :userId`,
+                `SELECT U.email, U.display_name, M.username FROM auth.users AS U
+                JOIN public.metadata AS M on M.user_id = U.id
+                WHERE id = :userId`,
                 {
                     type: QueryTypes.SELECT,
                     raw: true,
                     replacements: { userId: user.id }
                 }
             );
-
-            const senderName = senderNameData[0]?.display_name || '';
 
             for (let i = 0; i < data.length; i++) {
                 const element: any = data[i];
@@ -2645,11 +2637,8 @@ export class UsersService {
                     continue;
                 }
 
-                console.log(`User ${email} does not exist, creating new user`);
-
                 try {
-                    const newUser = await this.createNewUser(element, senderName);
-                    console.log(newUser, "---newUser---");
+                    const newUser = await this.createNewUser(element, senderNameData[0]);
                     if (newUser.success) {
                         console.log(`User ${email} created successfully`);
 
@@ -2669,8 +2658,6 @@ export class UsersService {
                                 updated_at: new Date()
                             }
                         });
-
-                        console.log(metadataCreate[0] || metadataCreate, "---metadataCreate---");
                     }
 
                     return {
